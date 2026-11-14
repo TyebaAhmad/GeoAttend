@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | GeoAttend</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        :root {
+            --bg: #eef2fb;
+            --ink: #1b2240;
+            --ink-2: #4a5376;
+            --muted: #8a92b2;
+            --primary: #4338ca;
+            --primary-2: #6d5ce8;
+            --teal: #14b8a6;
+            --rose: #f43f5e;
+            --line: rgba(27, 34, 64, 0.10);
+            --glass: rgba(255, 255, 255, 0.62);
+            --glass-border: rgba(255, 255, 255, 0.9);
+            --shadow: 0 30px 60px -25px rgba(48, 56, 120, 0.35), 0 4px 12px rgba(48, 56, 120, 0.06);
+        }
+
+        * { box-sizing: border-box; }
+        a { text-decoration: none; color: var(--primary); }
+
+        body {
+            margin: 0; min-height: 100vh;
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+            color: var(--ink); background: var(--bg);
+            display: grid; place-items: center;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        /* Background blobs + subtle grid */
+        .bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
+        .bg span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .6; }
+        .bg span:nth-child(1) { width: 560px; height: 560px; background: #c7c9ff; top: -180px; left: -160px; }
+        .bg span:nth-child(2) { width: 480px; height: 480px; background: #b9f1ea; bottom: -160px; right: -120px; }
+        .bg span:nth-child(3) { width: 360px; height: 360px; background: #ffe2c2; top: 40%; left: 55%; opacity: .45; }
+        .bg::after {
+            content: ""; position: absolute; inset: 0;
+            background-image: linear-gradient(rgba(67, 56, 202,.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(67, 56, 202,.05) 1px, transparent 1px);
+            background-size: 44px 44px;
+            mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+        }
+
+        /* ---------- Shell ---------- */
+        .shell {
+            width: 100%; max-width: 1120px; min-height: 660px;
+            display: grid; grid-template-columns: 1.05fr 1fr;
+            background: var(--glass);
+            backdrop-filter: blur(22px) saturate(160%);
+            -webkit-backdrop-filter: blur(22px) saturate(160%);
+            border: 1px solid var(--glass-border);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            animation: rise .6s ease both;
+        }
+        @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+        /* ---------- Visual side ---------- */
+        .visual {
+            position: relative; margin: 12px; border-radius: 20px; overflow: hidden;
+            min-height: 560px; color: #fff;
+            background: linear-gradient(135deg, #4338ca, #14b8a6);
+        }
+        .visual img {
+            position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+            transform: scale(1.04);
+        }
+        .visual::after {
+            content: ""; position: absolute; inset: 0;
+            background:
+                linear-gradient(180deg, rgba(27,34,64,.15) 0%, rgba(27,34,64,.05) 35%, rgba(36,30,110,.78) 100%),
+                linear-gradient(135deg, rgba(67, 56, 202,.35), rgba(20,184,166,.15));
+        }
+        .visual-inner { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; padding: 28px; }
+
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-logo {
+            width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 20px;
+            background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.45);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }
+        .brand b { font-size: 19px; font-weight: 800; letter-spacing: -.3px; display: block; line-height: 1.1; }
+        .brand small { font-size: 11.5px; opacity: .85; }
+
+        .glass-chip {
+            background: rgba(255,255,255,.18);
+            border: 1px solid rgba(255,255,255,.4);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border-radius: 16px; padding: 12px 14px;
+            box-shadow: 0 12px 30px -12px rgba(0,0,0,.35);
+        }
+        .float-card {
+            position: absolute; display: flex; align-items: center; gap: 10px; font-size: 13px;
+            animation: float 6s ease-in-out infinite;
+        }
+        .float-card .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; }
+        .float-card b { display: block; font-size: 13px; }
+        .float-card small { opacity: .85; font-size: 11.5px; }
+        .fc-1 { top: 110px; right: 26px; }
+        .fc-2 { top: 205px; left: 26px; animation-delay: -3s; }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+        .headline { margin-top: auto; }
+        .headline h2 { font-size: 32px; font-weight: 800; letter-spacing: -.8px; line-height: 1.15; margin: 0 0 10px; }
+        .headline p { font-size: 14.5px; opacity: .9; margin: 0 0 20px; max-width: 420px; line-height: 1.6; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .stats .glass-chip b { font-size: 20px; font-weight: 800; display: block; }
+        .stats .glass-chip small { font-size: 11.5px; opacity: .85; }
+
+        /* ---------- Form side ---------- */
+        .form-side { padding: 44px 52px; display: flex; flex-direction: column; justify-content: center; }
+        .mobile-brand { display: none; align-items: center; gap: 10px; margin-bottom: 22px; }
+        .mobile-brand .brand-logo { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; border: 0; }
+        .mobile-brand b { font-size: 18px; font-weight: 800; }
+
+        .tabs {
+            display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin-bottom: 26px;
+            background: rgba(27,34,64,.05); border: 1px solid var(--line); border-radius: 14px; position: relative;
+        }
+        .tabs button {
+            position: relative; z-index: 1; border: 0; background: transparent; padding: 10px;
+            font: inherit; font-size: 14px; font-weight: 700; color: var(--ink-2); cursor: pointer; border-radius: 10px;
+            transition: color .25s;
+        }
+        .tabs button.active { color: var(--primary); }
+        .tabs .slider {
+            position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+            background: #fff; border-radius: 10px; box-shadow: 0 4px 12px rgba(48,56,120,.12);
+            transition: transform .3s cubic-bezier(.4,.0,.2,1);
+        }
+        .tabs.signup .slider { transform: translateX(100%); }
+
+        h1.title { font-size: 26px; font-weight: 800; letter-spacing: -.6px; margin: 0 0 6px; }
+        p.subtitle { color: var(--muted); font-size: 14px; margin: 0 0 22px; }
+
+        .panel { display: none; animation: fade .35s ease both; }
+        .panel.active { display: block; }
+        @keyframes fade { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+
+        /* Role picker */
+        .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .roles.two { grid-template-columns: repeat(2, 1fr); }
+        .role input { display: none; }
+        .role label {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            padding: 12px 8px; border-radius: 14px; cursor: pointer;
+            background: rgba(255,255,255,.65); border: 1.5px solid var(--line);
+            font-size: 13px; font-weight: 700; color: var(--ink-2);
+            transition: all .2s;
+        }
+        .role label i { font-size: 20px; color: var(--muted); transition: color .2s; }
+        .role label:hover { border-color: rgba(67, 56, 202,.35); }
+        .role input:checked + label {
+            border-color: var(--primary); color: var(--primary);
+            background: rgba(67, 56, 202,.07); box-shadow: 0 0 0 4px rgba(67, 56, 202,.10);
+        }
+        .role input:checked + label i { color: var(--primary); }
+
+        /* Fields */
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .field { margin-bottom: 14px; }
+        .field label.lbl { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+        .input-wrap { position: relative; }
+        .input-wrap > i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; pointer-events: none; }
+        .input-wrap input, .input-wrap select {
+            width: 100%; padding: 12px 14px 12px 42px;
+            background: rgba(255,255,255,.8); border: 1.5px solid var(--line); border-radius: 12px;
+            font: inherit; font-size: 14px; color: var(--ink); outline: none; appearance: none;
+            transition: border-color .2s, box-shadow .2s, background .2s;
+        }
+        .input-wrap input::placeholder { color: #a9b0cb; }
+        .input-wrap input:focus, .input-wrap select:focus {
+            border-color: var(--primary); background: #fff; box-shadow: 0 0 0 4px rgba(67, 56, 202,.12);
+        }
+        .input-wrap.invalid input, .input-wrap.invalid select { border-color: var(--rose); box-shadow: 0 0 0 4px rgba(244,63,94,.10); }
+        .toggle-pw {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            border: 0; background: transparent; color: var(--muted); font-size: 17px; padding: 6px 8px; cursor: pointer; border-radius: 8px;
+        }
+        .toggle-pw:hover { color: var(--primary); }
+        .select-caret { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+
+        .meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 8px; }
+        .meter span { height: 4px; border-radius: 4px; background: rgba(27,34,64,.08); transition: background .3s; }
+        .meter-text { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+
+        .between { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 20px; font-size: 13px; }
+        .check { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; user-select: none; }
+        .check input { width: 16px; height: 16px; accent-color: var(--primary); }
+
+        .btn-main {
+            width: 100%; padding: 13px; border: 0; border-radius: 12px; cursor: pointer;
+            font: inherit; font-size: 15px; font-weight: 700; color: #fff;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 14px 26px -12px rgba(67, 56, 202,.85);
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            transition: transform .2s, filter .2s;
+        }
+        .btn-main:hover { transform: translateY(-1px); filter: brightness(1.05); }
+        .btn-main:disabled { opacity: .75; cursor: wait; transform: none; }
+        .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin: 20px 0; }
+        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+        .note {
+            display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px;
+            background: rgba(20,184,166,.08); border: 1px solid rgba(20,184,166,.25);
+            font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+        }
+        .note i { color: var(--teal); font-size: 16px; margin-top: 1px; }
+
+        .switch { text-align: center; font-size: 13.5px; color: var(--muted); margin-top: 18px; }
+        .switch a { font-weight: 700; cursor: pointer; }
+
+        .alert {
+            display: none; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; margin-bottom: 16px;
+            font-size: 13px; font-weight: 600;
+        }
+        .alert.show { display: flex; }
+        .alert.error { background: rgba(244,63,94,.10); color: #be123c; border: 1px solid rgba(244,63,94,.25); }
+        .alert.success { background: rgba(16,185,129,.10); color: #047857; border: 1px solid rgba(16,185,129,.25); }
+
+        .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 22px; }
+
+        /* ---------- Forgot password ---------- */
+        .form-side.forgot-mode .tabs { display: none; }
+        .back-link {
+            display: inline-flex; align-items: center; gap: 6px; margin-bottom: 18px;
+            font-size: 13px; font-weight: 700; color: var(--ink-2); cursor: pointer;
+            padding: 6px 12px 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.7);
+            transition: all .2s;
+        }
+        .back-link:hover { color: var(--primary); border-color: rgba(67, 56, 202,.3); }
+        .fp-icon {
+            width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 24px;
+            color: var(--primary); background: rgba(67, 56, 202,.10); border: 1px solid rgba(67, 56, 202,.18);
+            margin-bottom: 16px;
+        }
+        .steps { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+        .steps .st { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+        .steps .st b {
+            width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px;
+            background: rgba(27,34,64,.06); border: 1px solid var(--line); color: var(--muted); transition: all .3s;
+        }
+        .steps .st.active { color: var(--primary); }
+        .steps .st.active b { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(67, 56, 202,.15); }
+        .steps .st.done { color: #0f9f6e; }
+        .steps .st.done b { background: #10b981; border-color: #10b981; color: #fff; }
+        .steps .bar { flex: 1; height: 2px; border-radius: 2px; background: var(--line); min-width: 14px; }
+        .steps .bar.done { background: #10b981; }
+        .fp-step { display: none; animation: fade .35s ease both; }
+        .fp-step.active { display: block; }
+
+        .otp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 14px; }
+        .otp input {
+            width: 100%; aspect-ratio: 1 / 1.1; text-align: center; font: inherit; font-size: 22px; font-weight: 800; color: var(--ink);
+            background: rgba(255,255,255,.8); border: 1.5px solid var(--line); border-radius: 12px; outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .otp input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(67, 56, 202,.12); background: #fff; }
+        .otp.invalid input { border-color: var(--rose); }
+        .otp input.filled { border-color: rgba(67, 56, 202,.45); }
+        .resend { font-size: 13px; color: var(--muted); text-align: center; margin: 4px 0 20px; }
+        .resend a { font-weight: 700; cursor: pointer; }
+        .resend a.disabled { color: var(--muted); pointer-events: none; }
+        .demo-code {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; margin-bottom: 16px;
+            background: rgba(245,158,11,.10); border: 1px dashed rgba(245,158,11,.5); font-size: 12.5px; color: #92400e;
+        }
+        .demo-code b { font-size: 15px; letter-spacing: 3px; color: #78350f; }
+
+        .success-wrap { text-align: center; padding: 10px 0; }
+        .success-check {
+            width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 50%; display: grid; place-items: center;
+            font-size: 36px; color: #fff; background: linear-gradient(135deg, #10b981, #0d9488);
+            box-shadow: 0 16px 30px -12px rgba(16,185,129,.7), 0 0 0 10px rgba(16,185,129,.12);
+            animation: pop .5s cubic-bezier(.2,1.4,.4,1) both;
+        }
+        @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px); opacity: 0;
+            background: rgba(27,34,64,.92); color: #fff; padding: 12px 18px; border-radius: 12px;
+            font-size: 13.5px; font-weight: 600; display: flex; gap: 8px; align-items: center;
+            transition: all .3s ease; pointer-events: none; z-index: 50; max-width: calc(100% - 32px);
+        }
+        .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 991.98px) {
+            .shell { grid-template-columns: 1fr; max-width: 520px; min-height: 0; }
+            .visual { display: none; }
+            .mobile-brand { display: flex; }
+            .form-side { padding: 36px 32px; }
+        }
+        @media (max-width: 575.98px) {
+            body { padding: 16px; place-items: start center; }
+            .form-side { padding: 28px 20px; }
+            .row2 { grid-template-columns: 1fr; gap: 0; }
+            h1.title { font-size: 23px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg"><span></span><span></span><span></span></div>
+
+    <div class="shell">
+
+        <!-- ================= VISUAL SIDE ================= -->
+        <section class="visual" aria-hidden="true">
+            <img src="https://images.unsplash.com/photo-1562774053-701939374585?w=1200&q=80&auto=format&fit=crop"
+                 alt="" onerror="this.remove()">
+            <div class="visual-inner">
+                <div class="brand">
+                    <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+                    <div>
+                        <b>GeoAttend</b>
+                        <small>Smart Attendance System</small>
+                    </div>
+                </div>
+
+                <div class="float-card glass-chip fc-1">
+                    <div class="ic" style="background:rgba(16,185,129,.9)"><i class="bi bi-check2"></i></div>
+                    <div><b>Attendance marked</b><small>Inside geofence · 12 m away</small></div>
+                </div>
+                <div class="float-card glass-chip fc-2">
+                    <div class="ic" style="background:rgba(67, 56, 202,.9)"><i class="bi bi-broadcast"></i></div>
+                    <div><b>CS301 session live</b><small>Room B-204 · 50 m radius</small></div>
+                </div>
+
+                <div class="headline">
+                    <h2>Attendance that knows<br>you're really there.</h2>
+                    <p>GPS and geofencing verify every check-in in seconds — no roll calls, no proxies, no paperwork.</p>
+                    <div class="stats">
+                        <div class="glass-chip"><b>2.8k+</b><small>Students</small></div>
+                        <div class="glass-chip"><b>98%</b><small>Accuracy</small></div>
+                        <div class="glass-chip"><b>&lt; 5s</b><small>Check-in</small></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= FORM SIDE ================= -->
+        <section class="form-side">
+            <div class="mobile-brand">
+                <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+                <b>GeoAttend</b>
+            </div>
+
+            <div class="tabs" id="tabs">
+                <div class="slider"></div>
+                <button type="button" class="active" data-tab="signin">Sign In</button>
+                <button type="button" data-tab="signup">Sign Up</button>
+            </div>
+
+            <!-- ---------- SIGN IN ---------- -->
+            <div class="panel active" id="signin">
+                <h1 class="title">Welcome back</h1>
+                <p class="subtitle">Choose your role and sign in to continue.</p>
+
+                <div class="alert error" id="loginError"><i class="bi bi-exclamation-circle"></i><span></span></div>
+                <div class="alert success" id="loginSuccess"><i class="bi bi-check-circle"></i><span></span></div>
+
+                <form id="loginForm" novalidate>
+                    <div class="roles">
+                        <div class="role"><input type="radio" name="role" id="r-admin" value="admin" checked><label for="r-admin"><i class="bi bi-shield-lock"></i>Admin</label></div>
+                        <div class="role"><input type="radio" name="role" id="r-teacher" value="teacher"><label for="r-teacher"><i class="bi bi-person-video3"></i>Teacher</label></div>
+                        <div class="role"><input type="radio" name="role" id="r-student" value="student"><label for="r-student"><i class="bi bi-mortarboard"></i>Student</label></div>
+                    </div>
+
+                    <div class="field">
+                        <label class="lbl" for="loginUser" id="loginUserLabel">Username or Email</label>
+                        <div class="input-wrap">
+                            <i class="bi bi-person"></i>
+                            <input type="text" id="loginUser" placeholder="Enter your username" autocomplete="username">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="lbl" for="loginPass">Password</label>
+                        <div class="input-wrap">
+                            <i class="bi bi-lock"></i>
+                            <input type="password" id="loginPass" placeholder="Enter your password" autocomplete="current-password">
+                            <button type="button" class="toggle-pw" data-target="loginPass" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="between">
+                        <label class="check"><input type="checkbox" id="remember"> Remember me</label>
+                        <a href="#" id="forgot">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="btn-main" id="loginBtn">Sign In <i class="bi bi-arrow-right"></i></button>
+                </form>
+
+                <div class="divider">Secure campus access</div>
+                <div class="note">
+                    <i class="bi bi-geo-alt"></i>
+                    <span>Students and teachers: allow <b>location access</b> on your phone so GeoAttend can verify you're inside the classroom geofence.</span>
+                </div>
+
+                <div class="switch">New to GeoAttend? <a data-go="signup">Create an account</a></div>
+            </div>
+
+            <!-- ---------- SIGN UP ---------- -->
+            <div class="panel" id="signup">
+                <h1 class="title">Create your account</h1>
+                <p class="subtitle">Teachers and students can register here. Admin accounts are issued by the university.</p>
+
+                <div class="alert error" id="signupError"><i class="bi bi-exclamation-circle"></i><span></span></div>
+
+                <form id="signupForm" novalidate>
+                    <div class="roles two">
+                        <div class="role"><input type="radio" name="srole" id="s-student" value="student" checked><label for="s-student"><i class="bi bi-mortarboard"></i>Student</label></div>
+                        <div class="role"><input type="radio" name="srole" id="s-teacher" value="teacher"><label for="s-teacher"><i class="bi bi-person-video3"></i>Teacher</label></div>
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label class="lbl" for="suName">Full Name</label>
+                            <div class="input-wrap"><i class="bi bi-person"></i><input type="text" id="suName" placeholder="e.g. Ayesha Khan" autocomplete="name"></div>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="suId" id="suIdLabel">Roll Number</label>
+                            <div class="input-wrap"><i class="bi bi-person-badge"></i><input type="text" id="suId" placeholder="e.g. FA22-BCS-001"></div>
+                        </div>
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label class="lbl" for="suEmail">University Email</label>
+                            <div class="input-wrap"><i class="bi bi-envelope"></i><input type="email" id="suEmail" placeholder="name@university.edu" autocomplete="email"></div>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="suDept">Department</label>
+                            <div class="input-wrap">
+                                <i class="bi bi-building"></i>
+                                <select id="suDept">
+                                    <option value="">Select department</option>
+                                    <option>Computer Science</option>
+                                    <option>Software Engineering</option>
+                                    <option>Information Technology</option>
+                                    <option>Artificial Intelligence</option>
+                                    <option>Mathematics</option>
+                                    <option>Electrical Engineering</option>
+                                    <option>Business Administration</option>
+                                </select>
+                                <i class="bi bi-chevron-down select-caret"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label class="lbl" for="suPass">Password</label>
+                            <div class="input-wrap">
+                                <i class="bi bi-lock"></i>
+                                <input type="password" id="suPass" placeholder="Min. 8 characters" autocomplete="new-password">
+                                <button type="button" class="toggle-pw" data-target="suPass" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <div class="meter" id="meter"><span></span><span></span><span></span><span></span></div>
+                            <div class="meter-text" id="meterText">Use letters, numbers & symbols</div>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="suPass2">Confirm Password</label>
+                            <div class="input-wrap">
+                                <i class="bi bi-shield-check"></i>
+                                <input type="password" id="suPass2" placeholder="Re-enter password" autocomplete="new-password">
+                                <button type="button" class="toggle-pw" data-target="suPass2" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="between" style="margin-top:0">
+                        <label class="check"><input type="checkbox" id="terms"> I agree to share my location during attendance sessions</label>
+                    </div>
+
+                    <button type="submit" class="btn-main" id="signupBtn">Create Account <i class="bi bi-arrow-right"></i></button>
+                </form>
+
+                <div class="switch">Already have an account? <a data-go="signin">Sign in</a></div>
+            </div>
+
+            <!-- ---------- FORGOT PASSWORD ---------- -->
+            <div class="panel" id="forgot">
+                <a class="back-link" data-go="signin"><i class="bi bi-arrow-left"></i> Back to Sign In</a>
+
+                <div class="steps" id="fpSteps">
+                    <div class="st active" data-s="1"><b>1</b>Account</div><div class="bar"></div>
+                    <div class="st" data-s="2"><b>2</b>Verify</div><div class="bar"></div>
+                    <div class="st" data-s="3"><b>3</b>Reset</div>
+                </div>
+
+                <div class="alert error" id="fpError"><i class="bi bi-exclamation-circle"></i><span></span></div>
+
+                <!-- Step 1: find account -->
+                <div class="fp-step active" id="fp1">
+                    <div class="fp-icon"><i class="bi bi-key"></i></div>
+                    <h1 class="title">Forgot password?</h1>
+                    <p class="subtitle">No worries. Enter the email, username or roll number linked to your account and we'll send you a 6-digit verification code.</p>
+                    <form id="fpForm1" novalidate>
+                        <div class="field">
+                            <label class="lbl" for="fpUser">Email, Username or Roll Number</label>
+                            <div class="input-wrap"><i class="bi bi-envelope"></i><input type="text" id="fpUser" placeholder="name@university.edu" autocomplete="username"></div>
+                        </div>
+                        <button type="submit" class="btn-main" id="fpBtn1" style="margin-top:6px">Send Code <i class="bi bi-arrow-right"></i></button>
+                    </form>
+                </div>
+
+                <!-- Step 2: verify code -->
+                <div class="fp-step" id="fp2">
+                    <div class="fp-icon"><i class="bi bi-shield-lock"></i></div>
+                    <h1 class="title">Check your email</h1>
+                    <p class="subtitle">We sent a 6-digit code to <b id="fpMasked" style="color:var(--ink)"></b>. Enter it below to continue.</p>
+                    <div class="demo-code"><i class="bi bi-info-circle"></i><span>Demo mode (no email server yet) — your code is <b id="fpDemoCode"></b></span></div>
+                    <form id="fpForm2" novalidate>
+                        <div class="otp" id="otp">
+                            <input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 2">
+                            <input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 3"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 4">
+                            <input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 5"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 6">
+                        </div>
+                        <div class="resend">Didn't get it? <a id="resend" class="disabled">Resend code</a> <span id="resendTimer"></span></div>
+                        <button type="submit" class="btn-main" id="fpBtn2">Verify Code <i class="bi bi-arrow-right"></i></button>
+                    </form>
+                </div>
+
+                <!-- Step 3: new password -->
+                <div class="fp-step" id="fp3">
+                    <div class="fp-icon"><i class="bi bi-lock"></i></div>
+                    <h1 class="title">Set a new password</h1>
+                    <p class="subtitle">Your new password must be different from your previous one.</p>
+                    <form id="fpForm3" novalidate>
+                        <div class="field">
+                            <label class="lbl" for="fpPass">New Password</label>
+                            <div class="input-wrap">
+                                <i class="bi bi-lock"></i>
+                                <input type="password" id="fpPass" placeholder="Min. 8 characters" autocomplete="new-password">
+                                <button type="button" class="toggle-pw" data-target="fpPass" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <div class="meter" id="fpMeter"><span></span><span></span><span></span><span></span></div>
+                            <div class="meter-text" id="fpMeterText">Use letters, numbers & symbols</div>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="fpPass2">Confirm New Password</label>
+                            <div class="input-wrap">
+                                <i class="bi bi-shield-check"></i>
+                                <input type="password" id="fpPass2" placeholder="Re-enter new password" autocomplete="new-password">
+                                <button type="button" class="toggle-pw" data-target="fpPass2" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-main" id="fpBtn3" style="margin-top:6px">Reset Password <i class="bi bi-arrow-right"></i></button>
+                    </form>
+                </div>
+
+                <!-- Step 4: success -->
+                <div class="fp-step" id="fp4">
+                    <div class="success-wrap">
+                        <div class="success-check"><i class="bi bi-check-lg"></i></div>
+                        <h1 class="title">Password reset!</h1>
+                        <p class="subtitle">Your password has been changed successfully. You can now sign in with your new password.</p>
+                        <button type="button" class="btn-main" id="fpDone">Back to Sign In <i class="bi bi-arrow-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="foot">© <span id="year"></span> GeoAttend · GPS-Based Smart Attendance</div>
+        </section>
+    </div>
+
+    <div class="toast" id="toast"><i class="bi bi-info-circle"></i><span></span></div>
+
+    <script>
+        /*
+         * FRONTEND-ONLY DEMO AUTH
+         * There is no backend yet, so accounts are checked in the browser.
+         * This is NOT secure and must be replaced by the real backend login API.
+         * Demo accounts are documented in frontend/DEMO_ACCOUNTS.md.
+         */
+        const DEMO_USERS = [
+            { username: 'admin', email: 'admin@geoattend.edu', password: 'Admin@123', role: 'admin', name: 'Admin' }
+        ];
+        const DASHBOARDS = {
+            admin: 'admin_dashboard.html',
+            teacher: null,   // teacher_dashboard.html — coming soon
+            student: null    // student_dashboard.html — coming soon
+        };
+
+        const $ = id => document.getElementById(id);
+        $('year').textContent = new Date().getFullYear();
+
+        /* ---------- Tabs ---------- */
+        function showTab(name) {
+            document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+            $('tabs').classList.toggle('signup', name === 'signup');
+            document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === name));
+            document.querySelector('.form-side').classList.toggle('forgot-mode', name === 'forgot');
+            hideAlerts();
+        }
+        document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+        document.querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', () => showTab(a.dataset.go)));
+
+        /* ---------- Helpers ---------- */
+        function toast(msg, icon = 'bi-info-circle') {
+            const t = $('toast');
+            t.querySelector('i').className = 'bi ' + icon;
+            t.querySelector('span').textContent = msg;
+            t.classList.add('show');
+            clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3200);
+        }
+        function showAlert(id, msg) { const a = $(id); a.querySelector('span').textContent = msg; a.classList.add('show'); }
+        function hideAlerts() { document.querySelectorAll('.alert').forEach(a => a.classList.remove('show')); document.querySelectorAll('.invalid').forEach(e => e.classList.remove('invalid')); }
+        function markInvalid(input) { input.closest('.input-wrap').classList.add('invalid'); }
+        function readJSON(key, fallback) {
+            try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; }
+        }
+        // Registered users + demo users; demo-user passwords can be overridden by a reset (stored in ga_pw_reset).
+        function getUsers() {
+            const overrides = readJSON('ga_pw_reset', {});
+            const demo = DEMO_USERS.map(u => overrides[u.email] ? { ...u, password: overrides[u.email] } : u);
+            return demo.concat(readJSON('ga_users', []));
+        }
+        function findUser(identifier) {
+            const v = identifier.trim().toLowerCase();
+            return getUsers().find(u => [u.username, u.email, u.id].filter(Boolean).map(x => x.toLowerCase()).includes(v));
+        }
+        function updatePassword(user, newPass) {
+            try {
+                if (DEMO_USERS.some(d => d.email === user.email)) {
+                    const o = readJSON('ga_pw_reset', {}); o[user.email] = newPass;
+                    localStorage.setItem('ga_pw_reset', JSON.stringify(o));
+                } else {
+                    const users = readJSON('ga_users', []);
+                    const u = users.find(x => x.email === user.email);
+                    if (u) u.password = newPass;
+                    localStorage.setItem('ga_users', JSON.stringify(users));
+                }
+            } catch {}
+        }
+        function setLoading(btn, on, label) {
+            btn.disabled = on;
+            btn.innerHTML = on ? '<span class="spinner"></span> Please wait…' : label + ' <i class="bi bi-arrow-right"></i>';
+        }
+
+        /* ---------- Show / hide password ---------- */
+        document.querySelectorAll('.toggle-pw').forEach(btn => btn.addEventListener('click', () => {
+            const input = $(btn.dataset.target);
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.innerHTML = `<i class="bi ${show ? 'bi-eye-slash' : 'bi-eye'}"></i>`;
+        }));
+
+        /* ---------- Role-dependent labels ---------- */
+        document.querySelectorAll('input[name="role"]').forEach(r => r.addEventListener('change', () => {
+            const ph = { admin: 'Enter admin username', teacher: 'Enter your email', student: 'Enter your email or roll number' };
+            $('loginUser').placeholder = ph[r.value];
+            hideAlerts();
+        }));
+        document.querySelectorAll('input[name="srole"]').forEach(r => r.addEventListener('change', () => {
+            const teacher = r.value === 'teacher';
+            $('suIdLabel').textContent = teacher ? 'Employee ID' : 'Roll Number';
+            $('suId').placeholder = teacher ? 'e.g. EMP-1042' : 'e.g. FA22-BCS-001';
+        }));
+
+        /* ---------- Remember me ---------- */
+        try {
+            const saved = localStorage.getItem('ga_remember');
+            if (saved) { const s = JSON.parse(saved); $('loginUser').value = s.user; $('r-' + s.role).checked = true; $('remember').checked = true; }
+        } catch {}
+
+        /* ---------- Sign in ---------- */
+        $('loginForm').addEventListener('submit', e => {
+            e.preventDefault();
+            hideAlerts();
+            const role = document.querySelector('input[name="role"]:checked').value;
+            const userIn = $('loginUser'), passIn = $('loginPass');
+            const user = userIn.value.trim().toLowerCase(), pass = passIn.value;
+
+            if (!user) { markInvalid(userIn); return showAlert('loginError', 'Please enter your username or email.'); }
+            if (!pass) { markInvalid(passIn); return showAlert('loginError', 'Please enter your password.'); }
+
+            setLoading($('loginBtn'), true);
+            setTimeout(() => {
+                const match = getUsers().find(u =>
+                    u.role === role &&
+                    [u.username, u.email, u.id].filter(Boolean).map(v => v.toLowerCase()).includes(user) &&
+                    u.password === pass);
+                setLoading($('loginBtn'), false, 'Sign In');
+
+                if (!match) { markInvalid(passIn); return showAlert('loginError', 'Invalid credentials for the selected role.'); }
+
+                try {
+                    if ($('remember').checked) localStorage.setItem('ga_remember', JSON.stringify({ user: userIn.value.trim(), role }));
+                    else localStorage.removeItem('ga_remember');
+                    sessionStorage.setItem('ga_session', JSON.stringify({ name: match.name, role: match.role, at: Date.now() }));
+                } catch {}
+
+                const target = DASHBOARDS[role];
+                if (target) {
+                    showAlert('loginSuccess', `Welcome, ${match.name}! Redirecting to your dashboard…`);
+                    setTimeout(() => location.href = target, 700);
+                } else {
+                    toast(`Signed in as ${match.name}. The ${role} dashboard is coming soon.`, 'bi-hourglass-split');
+                }
+            }, 650);
+        });
+
+        /* ---------- Password strength ---------- */
+        function bindMeter(inputId, meterId, textId) {
+            $(inputId).addEventListener('input', e => {
+                const v = e.target.value;
+                let s = 0;
+                if (v.length >= 8) s++;
+                if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+                if (/\d/.test(v)) s++;
+                if (/[^A-Za-z0-9]/.test(v)) s++;
+                const colors = ['#f43f5e', '#f59e0b', '#0284c7', '#10b981'];
+                const words = ['Weak', 'Fair', 'Good', 'Strong'];
+                document.querySelectorAll(`#${meterId} span`).forEach((b, i) => b.style.background = i < s ? colors[s - 1] : '');
+                $(textId).textContent = v ? `Strength: ${words[Math.max(s - 1, 0)]}` : 'Use letters, numbers & symbols';
+            });
+        }
+        bindMeter('suPass', 'meter', 'meterText');
+        bindMeter('fpPass', 'fpMeter', 'fpMeterText');
+
+        /* ---------- Forgot password (demo: code is shown on screen, no email server yet) ---------- */
+        const fp = { user: null, code: null, timer: null };
+
+        function fpGo(step) {
+            hideAlerts();
+            [1, 2, 3, 4].forEach(n => $('fp' + n).classList.toggle('active', n === step));
+            document.querySelectorAll('#fpSteps .st').forEach(st => {
+                const n = +st.dataset.s;
+                st.classList.toggle('active', n === step);
+                st.classList.toggle('done', n < step);
+                st.querySelector('b').innerHTML = n < step ? '<i class="bi bi-check-lg"></i>' : n;
+            });
+            document.querySelectorAll('#fpSteps .bar').forEach((bar, i) => bar.classList.toggle('done', i + 1 < step));
+            $('fpSteps').style.display = step === 4 ? 'none' : '';
+            document.querySelector('#forgot .back-link').style.display = step === 4 ? 'none' : '';
+        }
+        function resetForgot() {
+            clearInterval(fp.timer);
+            Object.assign(fp, { user: null, code: null, timer: null });
+            ['fpForm1', 'fpForm3'].forEach(id => $(id).reset());
+            otpInputs.forEach(i => { i.value = ''; i.classList.remove('filled'); });
+            document.querySelectorAll('#fpMeter span').forEach(b => b.style.background = '');
+            $('fpMeterText').textContent = 'Use letters, numbers & symbols';
+            fpGo(1);
+        }
+        function maskEmail(email) {
+            if (!email) return 'your registered email';
+            const [name, domain] = email.split('@');
+            return name[0] + '•'.repeat(Math.max(name.length - 2, 1)) + name.slice(-1) + '@' + domain;
+        }
+        function sendCode() {
+            fp.code = String(Math.floor(100000 + Math.random() * 900000));
+            $('fpDemoCode').textContent = fp.code;
+            let left = 30;
+            const link = $('resend'), label = $('resendTimer');
+            link.classList.add('disabled');
+            label.textContent = `in ${left}s`;
+            clearInterval(fp.timer);
+            fp.timer = setInterval(() => {
+                left--;
+                label.textContent = left > 0 ? `in ${left}s` : '';
+                if (left <= 0) { clearInterval(fp.timer); link.classList.remove('disabled'); }
+            }, 1000);
+        }
+
+        $('forgot').addEventListener('click', e => {
+            e.preventDefault();
+            resetForgot();
+            const typed = $('loginUser').value.trim();
+            if (typed) $('fpUser').value = typed;
+            showTab('forgot');
+        });
+        document.querySelectorAll('#forgot [data-go]').forEach(a => a.addEventListener('click', () => clearInterval(fp.timer)));
+
+        // Step 1 — find the account and "send" the code
+        $('fpForm1').addEventListener('submit', e => {
+            e.preventDefault();
+            hideAlerts();
+            const input = $('fpUser');
+            if (!input.value.trim()) { markInvalid(input); return showAlert('fpError', 'Please enter your email, username or roll number.'); }
+            setLoading($('fpBtn1'), true);
+            setTimeout(() => {
+                setLoading($('fpBtn1'), false, 'Send Code');
+                const user = findUser(input.value);
+                if (!user) { markInvalid(input); return showAlert('fpError', 'We couldn\'t find an account with those details.'); }
+                fp.user = user;
+                $('fpMasked').textContent = maskEmail(user.email);
+                sendCode();
+                fpGo(2);
+                otpInputs[0].focus();
+            }, 700);
+        });
+
+        // Step 2 — OTP boxes: auto-advance, backspace, paste
+        const otpInputs = [...document.querySelectorAll('#otp input')];
+        otpInputs.forEach((inp, i) => {
+            inp.addEventListener('input', () => {
+                $('otp').classList.remove('invalid');
+                const digits = inp.value.replace(/\D/g, '');
+                if (digits.length > 1) {
+                    // Several digits at once (fast typing, SMS autofill): spread them across the boxes
+                    digits.slice(0, otpInputs.length - i).split('').forEach((d, k) => {
+                        otpInputs[i + k].value = d;
+                        otpInputs[i + k].classList.add('filled');
+                    });
+                    otpInputs[Math.min(i + digits.length, otpInputs.length - 1)].focus();
+                    return;
+                }
+                inp.value = digits;
+                inp.classList.toggle('filled', !!digits);
+                if (digits && i < otpInputs.length - 1) otpInputs[i + 1].focus();
+            });
+            inp.addEventListener('keydown', e => {
+                if (e.key === 'Backspace' && !inp.value && i > 0) otpInputs[i - 1].focus();
+            });
+            inp.addEventListener('paste', e => {
+                e.preventDefault();
+                const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6).split('');
+                digits.forEach((d, k) => { if (otpInputs[k]) { otpInputs[k].value = d; otpInputs[k].classList.add('filled'); } });
+                otpInputs[Math.min(digits.length, 5)].focus();
+            });
+        });
+        $('resend').addEventListener('click', () => {
+            sendCode();
+            otpInputs.forEach(i => { i.value = ''; i.classList.remove('filled'); });
+            otpInputs[0].focus();
+            toast('A new code has been sent.', 'bi-envelope-check');
+        });
+        $('fpForm2').addEventListener('submit', e => {
+            e.preventDefault();
+            hideAlerts();
+            const entered = otpInputs.map(i => i.value).join('');
+            if (entered.length < 6) { $('otp').classList.add('invalid'); return showAlert('fpError', 'Please enter the full 6-digit code.'); }
+            setLoading($('fpBtn2'), true);
+            setTimeout(() => {
+                setLoading($('fpBtn2'), false, 'Verify Code');
+                if (entered !== fp.code) { $('otp').classList.add('invalid'); return showAlert('fpError', 'Incorrect code. Please try again.'); }
+                clearInterval(fp.timer);
+                fpGo(3);
+                $('fpPass').focus();
+            }, 600);
+        });
+
+        // Step 3 — set new password
+        $('fpForm3').addEventListener('submit', e => {
+            e.preventDefault();
+            hideAlerts();
+            const p1 = $('fpPass'), p2 = $('fpPass2');
+            if (p1.value.length < 8) { markInvalid(p1); return showAlert('fpError', 'Password must be at least 8 characters.'); }
+            if (p1.value === fp.user.password) { markInvalid(p1); return showAlert('fpError', 'New password must be different from the old one.'); }
+            if (p1.value !== p2.value) { markInvalid(p2); return showAlert('fpError', 'Passwords do not match.'); }
+            setLoading($('fpBtn3'), true);
+            setTimeout(() => {
+                setLoading($('fpBtn3'), false, 'Reset Password');
+                updatePassword(fp.user, p1.value);
+                fpGo(4);
+            }, 700);
+        });
+
+        // Step 4 — back to sign in with the account pre-filled
+        $('fpDone').addEventListener('click', () => {
+            const u = fp.user;
+            showTab('signin');
+            if (u) { $('r-' + u.role).checked = true; $('loginUser').value = u.username || u.email; }
+            $('loginPass').value = '';
+            $('loginPass').focus();
+            showAlert('loginSuccess', 'Password updated. Sign in with your new password.');
+        });
+
+        /* ---------- Sign up ---------- */
+        $('signupForm').addEventListener('submit', e => {
+            e.preventDefault();
+            hideAlerts();
+            const role = document.querySelector('input[name="srole"]:checked').value;
+            const f = { name: $('suName'), id: $('suId'), email: $('suEmail'), dept: $('suDept'), pass: $('suPass'), pass2: $('suPass2') };
+
+            for (const [k, input] of Object.entries(f)) {
+                if (!input.value.trim()) { markInvalid(input); return showAlert('signupError', 'Please fill in all fields.'); }
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.value.trim())) { markInvalid(f.email); return showAlert('signupError', 'Please enter a valid email address.'); }
+            if (f.pass.value.length < 8) { markInvalid(f.pass); return showAlert('signupError', 'Password must be at least 8 characters.'); }
+            if (f.pass.value !== f.pass2.value) { markInvalid(f.pass2); return showAlert('signupError', 'Passwords do not match.'); }
+            if (!$('terms').checked) return showAlert('signupError', 'Please accept location sharing to use GeoAttend.');
+
+            const email = f.email.value.trim().toLowerCase();
+            if (getUsers().some(u => (u.email || '').toLowerCase() === email)) { markInvalid(f.email); return showAlert('signupError', 'An account with this email already exists.'); }
+
+            setLoading($('signupBtn'), true);
+            setTimeout(() => {
+                try {
+                    const users = JSON.parse(localStorage.getItem('ga_users') || '[]');
+                    users.push({ name: f.name.value.trim(), id: f.id.value.trim(), email, dept: f.dept.value, password: f.pass.value, role });
+                    localStorage.setItem('ga_users', JSON.stringify(users));
+                } catch {}
+                setLoading($('signupBtn'), false, 'Create Account');
+                $('signupForm').reset();
+                document.querySelectorAll('#meter span').forEach(b => b.style.background = '');
+                showTab('signin');
+                $('r-' + role).checked = true;
+                $('loginUser').value = email;
+                showAlert('loginSuccess', 'Account created! Sign in with your new credentials.');
+            }, 700);
+        });
+    </script>
+</body>
+</html>
