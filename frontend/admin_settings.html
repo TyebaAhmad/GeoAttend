@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+    <style>
+        :root {
+            --bg: #eef2fb;
+            --ink: #1b2240;
+            --ink-2: #4a5376;
+            --muted: #8a92b2;
+            --primary: #4338ca;
+            --primary-2: #6d5ce8;
+            --teal: #14b8a6;
+            --amber: #f59e0b;
+            --rose: #f43f5e;
+            --sky: #0284c7;
+            --glass: rgba(255, 255, 255, 0.58);
+            --glass-border: rgba(255, 255, 255, 0.85);
+            --line: rgba(27, 34, 64, 0.08);
+            --shadow: 0 10px 30px -12px rgba(48, 56, 120, 0.22), 0 2px 6px rgba(48, 56, 120, 0.05);
+            --radius: 20px;
+            --sidebar-w: 264px;
+        }
+
+        * { box-sizing: border-box; }
+        a { text-decoration: none; }
+
+        body {
+            margin: 0;
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+            color: var(--ink);
+            background: var(--bg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .bg-blobs { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
+        .bg-blobs span { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .55; }
+        .bg-blobs span:nth-child(1) { width: 520px; height: 520px; background: #c7c9ff; top: -160px; left: -120px; }
+        .bg-blobs span:nth-child(2) { width: 460px; height: 460px; background: #b9f1ea; bottom: -140px; right: -80px; }
+        .bg-blobs span:nth-child(3) { width: 380px; height: 380px; background: #ffe2c2; top: 35%; left: 45%; opacity: .4; }
+
+        .glass {
+            background: var(--glass);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        /* ---------- Sidebar (same as dashboard) ---------- */
+        .sidebar {
+            position: fixed; top: 16px; bottom: 16px; left: 16px;
+            width: var(--sidebar-w); padding: 22px 16px;
+            display: flex; flex-direction: column; z-index: 1040;
+            overflow-y: auto; scrollbar-width: thin;
+            transition: transform .3s ease;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; padding: 0 8px 22px; border-bottom: 1px solid var(--line); }
+        .brand-logo {
+            width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; color: #fff; font-size: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 8px 18px -6px rgba(67, 56, 202, .6);
+        }
+        .brand h1 { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -.3px; }
+        .brand small { color: var(--muted); font-size: 11.5px; font-weight: 500; }
+        .nav-label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; margin: 20px 12px 8px; }
+        .side-nav { list-style: none; padding: 0; margin: 0; }
+        .side-nav a {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 3px;
+            border-radius: 12px; border: 1px solid transparent;
+            color: var(--ink-2); font-size: 14px; font-weight: 600; transition: all .2s ease;
+        }
+        .side-nav a i { font-size: 17px; }
+        .side-nav a:hover { background: rgba(255,255,255,.7); color: var(--ink); border-color: var(--glass-border); }
+        .side-nav a.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            color: #fff; box-shadow: 0 8px 18px -8px rgba(67, 56, 202, .7);
+        }
+        .side-nav .badge-pill { margin-left: auto; font-size: 11px; font-weight: 700; background: rgba(244, 63, 94, .12); color: var(--rose); padding: 2px 8px; border-radius: 20px; }
+
+        /* ---------- Main ---------- */
+        .main { margin-left: calc(var(--sidebar-w) + 32px); padding: 16px 16px 110px 0; }
+        .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; margin-bottom: 22px; position: sticky; top: 16px; z-index: 1030; }
+        .search { flex: 1; max-width: 420px; position: relative; }
+        .search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+        .search input {
+            width: 100%; padding: 10px 14px 10px 40px; background: rgba(255,255,255,.7); border: 1px solid var(--line);
+            border-radius: 12px; font-size: 14px; color: var(--ink); outline: none;
+        }
+        .search input:focus { border-color: rgba(67, 56, 202,.5); box-shadow: 0 0 0 4px rgba(67, 56, 202,.12); }
+        .icon-btn {
+            width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; position: relative;
+            background: rgba(255,255,255,.7); border: 1px solid var(--line); color: var(--ink-2); font-size: 18px; cursor: pointer; transition: all .2s;
+        }
+        .icon-btn:hover { color: var(--primary); border-color: rgba(67, 56, 202,.35); }
+        .icon-btn .dot { position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); border: 2px solid #fff; }
+        .profile { display: flex; align-items: center; gap: 10px; padding-left: 14px; border-left: 1px solid var(--line); }
+        .avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 14px; background: linear-gradient(135deg, var(--teal), var(--sky)); }
+        .profile b { font-size: 14px; display: block; line-height: 1.2; }
+        .profile small { color: var(--muted); font-size: 12px; }
+        .menu-toggle { display: none; }
+
+        .page-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+        .page-head h2 { font-size: 26px; font-weight: 800; letter-spacing: -.5px; margin: 0; }
+        .page-head p { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+        .crumb { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+        .crumb a { color: var(--muted); }
+        .crumb a:hover { color: var(--primary); }
+
+        .btn-glass {
+            display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+            background: rgba(255,255,255,.75); border: 1px solid var(--glass-border); color: var(--ink); box-shadow: var(--shadow); transition: all .2s; cursor: pointer;
+        }
+        .btn-glass:hover { transform: translateY(-1px); color: var(--primary); }
+        .btn-primary-grad {
+            display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2)); border: 1px solid rgba(255,255,255,.4); color: #fff;
+            box-shadow: 0 10px 22px -10px rgba(67, 56, 202, .8); transition: all .2s; cursor: pointer;
+        }
+        .btn-primary-grad:hover { transform: translateY(-1px); color: #fff; filter: brightness(1.08); }
+        .btn-danger-soft {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 12px; font-size: 13.5px; font-weight: 700;
+            background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.3); color: #be123c; cursor: pointer; transition: all .2s; white-space: nowrap;
+        }
+        .btn-danger-soft:hover { background: var(--rose); color: #fff; border-color: var(--rose); }
+
+        /* ---------- Settings layout ---------- */
+        .settings-wrap { display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: start; }
+        .settings-nav { padding: 12px; position: sticky; top: 100px; }
+        .settings-nav a {
+            display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; margin-bottom: 2px;
+            color: var(--ink-2); font-size: 13.5px; font-weight: 600; border: 1px solid transparent; transition: all .2s; white-space: nowrap;
+        }
+        .settings-nav a i {
+            width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-size: 15px; flex-shrink: 0;
+            background: rgba(27,34,64,.05); color: var(--ink-2); transition: all .2s;
+        }
+        .settings-nav a span small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+        .settings-nav a:hover { background: rgba(255,255,255,.7); border-color: var(--glass-border); }
+        .settings-nav a.active { background: #fff; border-color: rgba(67, 56, 202,.18); color: var(--primary); box-shadow: 0 4px 14px -6px rgba(48,56,120,.25); }
+        .settings-nav a.active i { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; }
+
+        .section { display: none; animation: fade .3s ease both; }
+        .section.active { display: block; }
+        @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+        .card-s { padding: 24px; margin-bottom: 20px; }
+        .card-s:last-child { margin-bottom: 0; }
+        .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+        .card-head h3 { font-size: 16.5px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .card-head h3 i { color: var(--primary); }
+        .card-head p { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+
+        /* Setting rows */
+        .s-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 0; border-bottom: 1px dashed var(--line); }
+        .s-row:last-child { border-bottom: 0; padding-bottom: 0; }
+        .s-row .s-txt > b { font-size: 14px; font-weight: 700; display: block; }
+        .s-row .s-txt small b { color: var(--ink-2); }
+        .s-row .s-txt small { font-size: 12.5px; color: var(--muted); display: block; margin-top: 2px; max-width: 520px; }
+        .s-row .s-ctl { flex-shrink: 0; }
+
+        /* Form fields */
+        .f-label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+        .f-input, .f-select {
+            width: 100%; padding: 11px 14px; font: inherit; font-size: 14px; color: var(--ink);
+            background: rgba(255,255,255,.8); border: 1.5px solid var(--line); border-radius: 12px; outline: none;
+            transition: border-color .2s, box-shadow .2s, background .2s;
+        }
+        .f-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='%238a92b2'%3E%3Cpath d='M1.6 5.1a.6.6 0 0 1 .9 0L8 10.6l5.5-5.5a.6.6 0 1 1 .9.9l-6 6a.6.6 0 0 1-.9 0l-6-6a.6.6 0 0 1 0-.9z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+        .f-input:focus, .f-select:focus { border-color: var(--primary); background-color: #fff; box-shadow: 0 0 0 4px rgba(67, 56, 202,.12); }
+        .f-input.invalid { border-color: var(--rose); box-shadow: 0 0 0 4px rgba(244,63,94,.10); }
+        .f-help { font-size: 12px; color: var(--muted); margin-top: 5px; }
+        .input-group-s { display: flex; align-items: stretch; }
+        .input-group-s .f-input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .input-group-s .unit {
+            display: grid; place-items: center; padding: 0 14px; font-size: 13px; font-weight: 600; color: var(--muted);
+            background: rgba(27,34,64,.04); border: 1.5px solid var(--line); border-left: 0; border-radius: 0 12px 12px 0;
+        }
+        .s-ctl .f-input, .s-ctl .f-select { width: 180px; }
+        .s-ctl .input-group-s .f-input { width: 110px; }
+
+        /* Toggle switch */
+        .switch-t { position: relative; width: 46px; height: 26px; display: inline-block; }
+        .switch-t input { opacity: 0; width: 0; height: 0; }
+        .switch-t span {
+            position: absolute; inset: 0; cursor: pointer; border-radius: 26px;
+            background: rgba(27,34,64,.14); border: 1px solid rgba(27,34,64,.06); transition: all .25s;
+        }
+        .switch-t span::before {
+            content: ""; position: absolute; width: 20px; height: 20px; left: 2px; top: 2px; border-radius: 50%;
+            background: #fff; box-shadow: 0 2px 6px rgba(27,34,64,.25); transition: transform .25s;
+        }
+        .switch-t input:checked + span { background: linear-gradient(135deg, var(--primary), var(--primary-2)); }
+        .switch-t input:checked + span::before { transform: translateX(20px); }
+        .switch-t input:focus-visible + span { box-shadow: 0 0 0 4px rgba(67, 56, 202,.2); }
+
+        /* Range */
+        .range-wrap { display: flex; align-items: center; gap: 14px; }
+        .range-wrap output {
+            min-width: 64px; text-align: center; font-weight: 800; font-size: 14px; color: var(--primary);
+            background: rgba(67, 56, 202,.08); border: 1px solid rgba(67, 56, 202,.18); padding: 6px 10px; border-radius: 10px;
+        }
+        input[type=range] { flex: 1; accent-color: var(--primary); height: 6px; cursor: pointer; }
+
+        /* Segmented choice */
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chips label { cursor: pointer; }
+        .chips input { display: none; }
+        .chips span {
+            display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
+            background: rgba(255,255,255,.7); border: 1.5px solid var(--line); color: var(--ink-2); transition: all .2s;
+        }
+        .chips input:checked + span { border-color: var(--primary); color: var(--primary); background: rgba(67, 56, 202,.07); }
+
+        /* Profile */
+        .profile-card { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .big-avatar {
+            width: 84px; height: 84px; border-radius: 24px; display: grid; place-items: center; font-size: 28px; font-weight: 800; color: #fff;
+            background: linear-gradient(135deg, var(--teal), var(--sky)); box-shadow: 0 12px 26px -12px rgba(2,132,199,.7); border: 3px solid #fff;
+            background-size: cover; background-position: center;
+        }
+        .role-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; color: var(--primary); background: rgba(67, 56, 202,.10); }
+
+        /* Logo upload */
+        .logo-box {
+            width: 72px; height: 72px; border-radius: 18px; display: grid; place-items: center; font-size: 26px; color: var(--primary);
+            background: rgba(67, 56, 202,.08); border: 1.5px dashed rgba(67, 56, 202,.35); overflow: hidden; flex-shrink: 0;
+        }
+        .logo-box img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Map */
+        #settingsMap { height: 320px; border-radius: 14px; border: 1px solid var(--glass-border); z-index: 1; }
+        .leaflet-container { font-family: inherit; background: #f4f6fc; }
+        .soft-tiles { filter: saturate(.45) brightness(1.06) contrast(.95); }
+
+        /* Info / list items */
+        .info-note { display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); background: rgba(2,132,199,.07); border: 1px solid rgba(2,132,199,.2); margin-top: 14px; }
+        .info-note i { color: var(--sky); font-size: 16px; }
+        .device { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px dashed var(--line); }
+        .device:last-child { border-bottom: 0; padding-bottom: 0; }
+        .device .di { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: rgba(27,34,64,.05); color: var(--ink-2); flex-shrink: 0; }
+        .device b { font-size: 14px; display: block; }
+        .device small { font-size: 12px; color: var(--muted); }
+        .tag-now { font-size: 11px; font-weight: 700; color: #0f9f6e; background: rgba(16,185,129,.12); padding: 3px 8px; border-radius: 20px; margin-left: 6px; }
+        .link-btn { border: 0; background: transparent; font-size: 13px; font-weight: 700; color: var(--rose); cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+        .link-btn:hover { background: rgba(244,63,94,.08); }
+
+        .danger { border-color: rgba(244,63,94,.35) !important; }
+        .danger .card-head h3 i { color: var(--rose); }
+
+        /* Save bar */
+        .save-bar {
+            position: fixed; left: calc(var(--sidebar-w) + 32px); right: 16px; bottom: 16px; z-index: 1035;
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px;
+            transform: translateY(140%); transition: transform .35s cubic-bezier(.2,.9,.3,1);
+            background: rgba(255,255,255,.82);
+        }
+        .save-bar.show { transform: none; }
+        .save-bar .msg { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+        .save-bar .msg i { color: var(--amber); font-size: 18px; }
+
+        /* Toast */
+        .toast-s {
+            position: fixed; top: 24px; right: 24px; z-index: 2000; display: flex; align-items: center; gap: 10px;
+            padding: 12px 18px; border-radius: 14px; font-size: 14px; font-weight: 600; color: #fff;
+            background: rgba(27,34,64,.92); box-shadow: 0 16px 30px -12px rgba(0,0,0,.4);
+            transform: translateY(-20px); opacity: 0; pointer-events: none; transition: all .3s ease;
+        }
+        .toast-s.show { transform: none; opacity: 1; }
+        .toast-s.success i { color: #34d399; }
+        .toast-s.error i { color: #fb7185; }
+
+        /* Confirm modal */
+        .modal-bg { position: fixed; inset: 0; z-index: 2050; background: rgba(27,34,64,.35); backdrop-filter: blur(4px); display: none; place-items: center; padding: 16px; }
+        .modal-bg.show { display: grid; }
+        .modal-box { width: 100%; max-width: 420px; padding: 26px; background: rgba(255,255,255,.92); animation: fade .25s ease both; }
+        .modal-box .mi { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 22px; color: var(--rose); background: rgba(244,63,94,.1); margin-bottom: 14px; }
+        .modal-box h4 { font-size: 18px; font-weight: 800; margin: 0 0 6px; }
+        .modal-box p { font-size: 13.5px; color: var(--ink-2); margin: 0 0 20px; }
+
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(27,34,64,.25); backdrop-filter: blur(2px); z-index: 1035; }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 1199.98px) {
+            .sidebar { transform: translateX(calc(-100% - 24px)); }
+            body.nav-open .sidebar { transform: none; }
+            body.nav-open .overlay { display: block; }
+            .main { margin-left: 0; padding: 16px 16px 110px; }
+            .menu-toggle { display: grid; }
+            .save-bar { left: 16px; }
+        }
+        @media (max-width: 991.98px) {
+            .settings-wrap { grid-template-columns: 1fr; }
+            .settings-nav { position: static; display: flex; overflow-x: auto; gap: 6px; padding: 8px; scrollbar-width: none; }
+            .settings-nav::-webkit-scrollbar { display: none; }
+            .settings-nav a { margin: 0; padding: 8px 12px; }
+            .settings-nav a i { width: 28px; height: 28px; }
+            .settings-nav a span small { display: none; }
+        }
+        @media (max-width: 575.98px) {
+            .profile div, .search { display: none; }
+            .topbar { justify-content: space-between; }
+            .profile { border-left: 0; padding-left: 0; }
+            .page-head h2 { font-size: 22px; }
+            .card-s { padding: 18px; }
+            .s-row { flex-direction: column; align-items: stretch; gap: 10px; }
+            .s-row.inline { flex-direction: row; align-items: center; }
+            .s-ctl .f-input, .s-ctl .f-select { width: 100%; }
+            .s-ctl .input-group-s .f-input { width: 100%; }
+            .save-bar { flex-direction: column; align-items: stretch; }
+            .save-bar .d-flex { justify-content: stretch; }
+            .save-bar .d-flex > * { flex: 1; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div>
+                <h1>GeoAttend</h1>
+                <small>Smart Attendance System</small>
+            </div>
+        </div>
+
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="#"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="#"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="#"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="#"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="#"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="#"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html" class="active"><i class="bi bi-gear-fill"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="settingSearch" placeholder="Search settings...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar" id="topAvatar">AD</div>
+                    <div>
+                        <b id="topName">Admin</b>
+                        <small>Super Administrator</small>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Settings</div>
+                <h2>Settings</h2>
+                <p>Configure your university, attendance rules, geofencing and system preferences.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn-glass" id="exportBtn"><i class="bi bi-download"></i> Export Settings</button>
+                <button class="btn-primary-grad" id="saveTop"><i class="bi bi-check2-circle"></i> Save Changes</button>
+            </div>
+        </div>
+
+        <div class="settings-wrap">
+
+            <!-- Settings navigation -->
+            <nav class="settings-nav glass" id="settingsNav">
+                <a href="#general" data-sec="general" class="active"><i class="bi bi-building"></i><span>General<small>University info</small></span></a>
+                <a href="#profile" data-sec="profile"><i class="bi bi-person-circle"></i><span>Profile &amp; Account<small>Your admin account</small></span></a>
+                <a href="#attendance" data-sec="attendance"><i class="bi bi-clipboard-check"></i><span>Attendance Rules<small>Late, absent, sessions</small></span></a>
+                <a href="#geofence" data-sec="geofence"><i class="bi bi-geo-alt"></i><span>Geofencing &amp; GPS<small>Zones and accuracy</small></span></a>
+                <a href="#notifications" data-sec="notifications"><i class="bi bi-bell"></i><span>Notifications<small>Alerts and channels</small></span></a>
+                <a href="#users" data-sec="users"><i class="bi bi-people"></i><span>Users &amp; Registration<small>Sign up and approvals</small></span></a>
+                <a href="#security" data-sec="security"><i class="bi bi-shield-lock"></i><span>Security<small>Login and sessions</small></span></a>
+                <a href="#data" data-sec="data"><i class="bi bi-database"></i><span>Reports &amp; Data<small>Exports and backups</small></span></a>
+            </nav>
+
+            <div>
+                <!-- ================= GENERAL ================= -->
+                <section class="section active" id="sec-general">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-building"></i> University Information</h3><p>Basic details shown across the system and in reports.</p></div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3 py-3" style="border-bottom:1px dashed var(--line)">
+                            <div class="logo-box" id="logoBox"><i class="bi bi-image"></i></div>
+                            <div>
+                                <b style="font-size:14px">University Logo</b>
+                                <div class="f-help mt-0 mb-2">PNG or JPG, square, max 1 MB. Used on reports and the login page.</div>
+                                <label class="btn-glass" style="padding:7px 14px;font-size:13px"><i class="bi bi-upload"></i> Upload Logo<input type="file" id="logoInput" accept="image/png,image/jpeg" hidden></label>
+                                <button type="button" class="link-btn" id="logoRemove">Remove</button>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 pt-3">
+                            <div class="col-md-8"><label class="f-label">University Name</label><input class="f-input" data-key="uniName" placeholder="e.g. National University of Technology"></div>
+                            <div class="col-md-4"><label class="f-label">Short Name</label><input class="f-input" data-key="uniShort" placeholder="e.g. NUT"></div>
+                            <div class="col-md-6"><label class="f-label">Official Email</label><input class="f-input" type="email" data-key="uniEmail" placeholder="info@university.edu"></div>
+                            <div class="col-md-6"><label class="f-label">Contact Number</label><input class="f-input" data-key="uniPhone" placeholder="+92 51 1234567"></div>
+                            <div class="col-12"><label class="f-label">Campus Address</label><input class="f-input" data-key="uniAddress" placeholder="Street, City, Country"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-calendar3"></i> Academic Calendar</h3><p>Current term and working days used for attendance calculation.</p></div>
+                        </div>
+                        <div class="row g-3 pt-2">
+                            <div class="col-md-4"><label class="f-label">Academic Year</label>
+                                <select class="f-select" data-key="academicYear"><option>2025-2026</option><option>2026-2027</option><option>2027-2028</option></select></div>
+                            <div class="col-md-4"><label class="f-label">Current Semester</label>
+                                <select class="f-select" data-key="semester"><option>Fall</option><option>Spring</option><option>Summer</option></select></div>
+                            <div class="col-md-4"><label class="f-label">Time Zone</label>
+                                <select class="f-select" data-key="timezone">
+                                    <option value="Asia/Karachi">(GMT+5) Pakistan Time</option>
+                                    <option value="Asia/Dubai">(GMT+4) Gulf Time</option>
+                                    <option value="Asia/Kolkata">(GMT+5:30) India Time</option>
+                                    <option value="Europe/London">(GMT+0) London</option>
+                                    <option value="America/New_York">(GMT-5) New York</option>
+                                </select></div>
+                            <div class="col-md-6"><label class="f-label">Semester Start</label><input class="f-input" type="date" data-key="semStart"></div>
+                            <div class="col-md-6"><label class="f-label">Semester End</label><input class="f-input" type="date" data-key="semEnd"></div>
+                            <div class="col-12">
+                                <label class="f-label">Working Days</label>
+                                <div class="chips" id="workDays"></div>
+                            </div>
+                            <div class="col-md-6"><label class="f-label">Date Format</label>
+                                <select class="f-select" data-key="dateFormat"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></div>
+                            <div class="col-md-6"><label class="f-label">Time Format</label>
+                                <select class="f-select" data-key="timeFormat"><option value="12h">12-hour (09:30 AM)</option><option value="24h">24-hour (09:30)</option></select></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= PROFILE ================= -->
+                <section class="section" id="sec-profile">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-person-circle"></i> Admin Profile</h3><p>Your personal details as the system administrator.</p></div>
+                        </div>
+                        <div class="profile-card py-3">
+                            <div class="big-avatar" id="bigAvatar">AD</div>
+                            <div>
+                                <b style="font-size:18px" id="profileNameView">Admin</b>
+                                <div class="mt-1 mb-2"><span class="role-badge"><i class="bi bi-shield-check"></i> Super Administrator</span></div>
+                                <label class="btn-glass" style="padding:7px 14px;font-size:13px"><i class="bi bi-camera"></i> Change Photo<input type="file" id="photoInput" accept="image/png,image/jpeg" hidden></label>
+                                <button type="button" class="link-btn" id="photoRemove">Remove</button>
+                            </div>
+                        </div>
+                        <div class="row g-3 pt-2">
+                            <div class="col-md-6"><label class="f-label">Full Name</label><input class="f-input" data-key="adminName" id="adminName"></div>
+                            <div class="col-md-6"><label class="f-label">Email</label><input class="f-input" type="email" data-key="adminEmail"></div>
+                            <div class="col-md-6"><label class="f-label">Phone</label><input class="f-input" data-key="adminPhone" placeholder="+92 300 1234567"></div>
+                            <div class="col-md-6"><label class="f-label">Designation</label><input class="f-input" data-key="adminTitle" placeholder="e.g. IT Administrator"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-key"></i> Change Password</h3><p>Use at least 8 characters with letters, numbers and a symbol.</p></div>
+                        </div>
+                        <form id="pwForm" novalidate>
+                            <div class="row g-3 pt-2">
+                                <div class="col-md-4"><label class="f-label">Current Password</label><input class="f-input" type="password" id="pwCurrent" autocomplete="current-password"></div>
+                                <div class="col-md-4"><label class="f-label">New Password</label><input class="f-input" type="password" id="pwNew" autocomplete="new-password"></div>
+                                <div class="col-md-4"><label class="f-label">Confirm New Password</label><input class="f-input" type="password" id="pwConfirm" autocomplete="new-password"></div>
+                                <div class="col-12 d-flex justify-content-end"><button type="submit" class="btn-primary-grad"><i class="bi bi-lock"></i> Update Password</button></div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- ================= ATTENDANCE RULES ================= -->
+                <section class="section" id="sec-attendance">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-clock-history"></i> Session Timing</h3><p>How long sessions stay open and when students are marked late or absent.</p></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Default session duration</b><small>How long an attendance session stays open after a teacher starts it.</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><input class="f-input" type="number" min="1" max="180" data-key="sessionDuration"><span class="unit">min</span></div></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Mark as late after</b><small>Students who check in after this many minutes are marked <b>Late</b>.</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><input class="f-input" type="number" min="0" max="120" data-key="lateAfter"><span class="unit">min</span></div></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Mark as absent after</b><small>Students who haven't checked in by this time are marked <b>Absent</b>.</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><input class="f-input" type="number" min="1" max="180" data-key="absentAfter"><span class="unit">min</span></div></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Auto-close sessions</b><small>Close the session automatically when its duration ends.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="autoClose"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Late counts as present</b><small>Include late check-ins when calculating attendance percentage.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="lateCountsPresent"><span></span></label></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-percent"></i> Attendance Requirements</h3><p>Minimum attendance policy and teacher permissions.</p></div>
+                        </div>
+                        <div class="s-row" style="display:block">
+                            <div class="s-txt mb-2"><b>Minimum required attendance</b><small>Students below this percentage are flagged as low attendance.</small></div>
+                            <div class="range-wrap"><input type="range" min="50" max="100" step="5" data-key="minAttendance" id="minAtt"><output id="minAttOut"></output></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Allow teachers to edit attendance</b><small>Teachers can manually change a student's status after the session.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="teacherEdit"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Edit window for teachers</b><small>How long after a session teachers may make manual changes.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="editWindow"><option value="1">1 hour</option><option value="24">24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Allow one check-in per session</b><small>Prevent students from marking attendance more than once.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="singleCheckin"><span></span></label></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= GEOFENCE & GPS ================= -->
+                <section class="section" id="sec-geofence">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-pin-map"></i> Main Campus Location</h3><p>Drag the pin or click the map to set the campus centre. The circle shows the default radius.</p></div>
+                        </div>
+                        <div class="pt-2"><div id="settingsMap"></div></div>
+                        <div class="row g-3 pt-3">
+                            <div class="col-md-6"><label class="f-label">Latitude</label><input class="f-input" type="number" step="0.000001" data-key="campusLat" id="campusLat"></div>
+                            <div class="col-md-6"><label class="f-label">Longitude</label><input class="f-input" type="number" step="0.000001" data-key="campusLng" id="campusLng"></div>
+                        </div>
+                        <div class="pt-3" style="display:block">
+                            <div class="s-txt mb-2"><b style="font-size:14px">Default geofence radius</b><div class="f-help mt-0">Used when a teacher starts a session without choosing a custom radius.</div></div>
+                            <div class="range-wrap"><input type="range" min="10" max="500" step="5" data-key="defaultRadius" id="radius"><output id="radiusOut"></output></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-crosshair"></i> GPS Verification</h3><p>Control how strictly student locations are checked.</p></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Maximum allowed GPS accuracy</b><small>Reject check-ins when the phone reports accuracy worse than this (indoor GPS is often 20–50 m).</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><input class="f-input" type="number" min="5" max="200" data-key="maxAccuracy"><span class="unit">m</span></div></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Require high-accuracy mode</b><small>Ask the phone for its most precise location (uses more battery).</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="highAccuracy"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Detect fake GPS / mock location</b><small>Block check-ins from devices using location-spoofing apps.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="mockDetect"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Dynamic QR code verification</b><small>Students must also scan a rotating QR code shown by the teacher.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="qrVerify"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>QR code refresh interval</b><small>How often the teacher's QR code changes.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="qrInterval"><option value="10">Every 10 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Bind student to one device</b><small>Each student can only mark attendance from their registered phone.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="deviceBind"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Save check-in location</b><small>Store latitude/longitude with each attendance record for auditing.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="storeLocation"><span></span></label></div>
+                        </div>
+                        <div class="info-note"><i class="bi bi-info-circle"></i><span>Location is only read while a student is marking attendance — GeoAttend never tracks students in the background.</span></div>
+                    </div>
+                </section>
+
+                <!-- ================= NOTIFICATIONS ================= -->
+                <section class="section" id="sec-notifications">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-broadcast-pin"></i> Delivery Channels</h3><p>Where notifications are sent.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b><i class="bi bi-envelope me-1"></i> Email</b><small>Send notifications to users' university email.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="chEmail"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b><i class="bi bi-phone me-1"></i> Push notifications</b><small>Show alerts on students' and teachers' phones.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="chPush"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b><i class="bi bi-chat-dots me-1"></i> SMS</b><small>Text message alerts (may require an SMS provider).</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="chSms"><span></span></label></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-bell"></i> Alerts</h3><p>Choose which events trigger a notification.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Session started</b><small>Notify enrolled students when a teacher starts an attendance session.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="nSessionStart"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Session closing reminder</b><small>Remind students who haven't checked in before the session closes.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="nReminder"><option value="0">Off</option><option value="2">2 min before</option><option value="5">5 min before</option><option value="10">10 min before</option></select></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Low attendance warning</b><small>Warn students when they fall below the minimum attendance.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="nLowAttendance"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Notify parents / guardians</b><small>Also email guardians about low attendance (if contact is on file).</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="nParents"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>New registration requests</b><small>Notify admins when a teacher or student signs up.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="nNewUser"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Suspicious check-in alerts</b><small>Alert admins about fake GPS, repeated failures or device mismatches.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="nSuspicious"><span></span></label></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-moon-stars"></i> Quiet Hours</h3><p>Pause non-urgent notifications during these hours.</p></div>
+                            <label class="switch-t"><input type="checkbox" data-key="quietOn"><span></span></label>
+                        </div>
+                        <div class="row g-3 pt-2">
+                            <div class="col-6"><label class="f-label">From</label><input class="f-input" type="time" data-key="quietFrom"></div>
+                            <div class="col-6"><label class="f-label">To</label><input class="f-input" type="time" data-key="quietTo"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= USERS & REGISTRATION ================= -->
+                <section class="section" id="sec-users">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-person-plus"></i> Self Registration</h3><p>Control who can create accounts from the Sign Up page.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Allow student registration</b><small>Students can create their own accounts.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="regStudents"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Allow teacher registration</b><small>Teachers can create their own accounts.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="regTeachers"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Require admin approval</b><small>New accounts stay pending until an admin approves them.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="regApproval"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Allowed email domain</b><small>Only emails ending with this domain can register. Leave empty to allow any.</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><span class="unit" style="border-left:1.5px solid var(--line);border-right:0;border-radius:12px 0 0 12px">@</span><input class="f-input" data-key="emailDomain" placeholder="university.edu" style="border-radius:0 12px 12px 0;width:160px"></div></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Roll number format</b><small>Pattern students must follow, e.g. FA22-BCS-001.</small></div>
+                            <div class="s-ctl"><input class="f-input" data-key="rollFormat" placeholder="AA00-AAA-000"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-diagram-3"></i> Departments</h3><p>Departments shown on the Sign Up form and in reports.</p></div>
+                        </div>
+                        <div class="chips pt-2" id="deptList"></div>
+                        <form class="d-flex gap-2 pt-3" id="deptForm">
+                            <input class="f-input" id="deptInput" placeholder="Add a department, e.g. Physics">
+                            <button class="btn-primary-grad" type="submit" style="white-space:nowrap"><i class="bi bi-plus-lg"></i> Add</button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- ================= SECURITY ================= -->
+                <section class="section" id="sec-security">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-shield-lock"></i> Login Security</h3><p>Protect accounts against unauthorised access.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Two-factor authentication (2FA) for admins</b><small>Require a one-time code in addition to the password.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="twoFactor"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Auto logout after inactivity</b><small>Sign users out after this period without activity.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="sessionTimeout"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="240">4 hours</option><option value="0">Never</option></select></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Lock account after failed logins</b><small>Temporarily lock the account after this many wrong passwords.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="maxAttempts"><option value="3">3 attempts</option><option value="5">5 attempts</option><option value="10">10 attempts</option></select></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Minimum password length</b><small>Applies to new passwords for all users.</small></div>
+                            <div class="s-ctl"><div class="input-group-s"><input class="f-input" type="number" min="6" max="32" data-key="pwMinLength"><span class="unit">chars</span></div></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Require strong passwords</b><small>Passwords must include upper and lower case letters, a number and a symbol.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="pwStrong"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Password expiry</b><small>Ask users to change their password periodically.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="pwExpiry"><option value="0">Never</option><option value="90">Every 90 days</option><option value="180">Every 180 days</option></select></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-laptop"></i> Active Sessions</h3><p>Devices currently signed in to your admin account.</p></div>
+                            <button class="btn-danger-soft" id="logoutAll"><i class="bi bi-box-arrow-right"></i> Sign out others</button>
+                        </div>
+                        <div id="deviceList"></div>
+                    </div>
+                </section>
+
+                <!-- ================= REPORTS & DATA ================= -->
+                <section class="section" id="sec-data">
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-file-earmark-bar-graph"></i> Automatic Reports</h3><p>Send attendance reports to admins on a schedule.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Daily summary</b><small>Attendance summary at the end of each working day.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="repDaily"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Weekly report</b><small>Every Monday morning, covering the previous week.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="repWeekly"><span></span></label></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Monthly report</b><small>On the 1st of each month, with department and course breakdowns.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="repMonthly"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Default export format</b><small>File type used when downloading reports.</small></div>
+                            <div class="s-ctl">
+                                <div class="chips">
+                                    <label><input type="radio" name="exportFmt" value="pdf" data-key="exportFormat"><span><i class="bi bi-filetype-pdf"></i> PDF</span></label>
+                                    <label><input type="radio" name="exportFmt" value="xlsx" data-key="exportFormat"><span><i class="bi bi-filetype-xlsx"></i> Excel</span></label>
+                                    <label><input type="radio" name="exportFmt" value="csv" data-key="exportFormat"><span><i class="bi bi-filetype-csv"></i> CSV</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-cloud-arrow-up"></i> Backup &amp; Retention</h3><p>Keep attendance data safe and decide how long it is stored.</p></div>
+                        </div>
+                        <div class="s-row inline">
+                            <div class="s-txt"><b>Automatic backups</b><small>Back up the database automatically.</small></div>
+                            <div class="s-ctl"><label class="switch-t"><input type="checkbox" data-key="autoBackup"><span></span></label></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Backup frequency</b><small>How often a new backup is created.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="backupFreq"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Keep attendance records for</b><small>Older records are archived automatically.</small></div>
+                            <div class="s-ctl"><select class="f-select" data-key="retention"><option value="1">1 year</option><option value="2">2 years</option><option value="4">4 years (full degree)</option><option value="0">Forever</option></select></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Last backup</b><small id="lastBackup">No backup yet</small></div>
+                            <div class="s-ctl"><button class="btn-glass" id="backupNow"><i class="bi bi-cloud-arrow-up"></i> Back up now</button></div>
+                        </div>
+                    </div>
+
+                    <div class="card-s glass danger">
+                        <div class="card-head">
+                            <div><h3><i class="bi bi-exclamation-octagon"></i> Danger Zone</h3><p>These actions cannot be undone.</p></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Reset all settings</b><small>Restore every setting on this page to its default value.</small></div>
+                            <div class="s-ctl"><button class="btn-danger-soft" id="resetSettings"><i class="bi bi-arrow-counterclockwise"></i> Reset settings</button></div>
+                        </div>
+                        <div class="s-row">
+                            <div class="s-txt"><b>Clear demo data</b><small>Delete demo sign-ups and password resets saved in this browser.</small></div>
+                            <div class="s-ctl"><button class="btn-danger-soft" id="clearData"><i class="bi bi-trash3"></i> Clear demo data</button></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Unsaved changes bar -->
+    <div class="save-bar glass" id="saveBar">
+        <div class="msg"><i class="bi bi-exclamation-circle-fill"></i> You have unsaved changes</div>
+        <div class="d-flex gap-2">
+            <button class="btn-glass" id="discardBtn">Discard</button>
+            <button class="btn-primary-grad" id="saveBtn"><i class="bi bi-check2-circle"></i> Save Changes</button>
+        </div>
+    </div>
+
+    <!-- Confirm modal -->
+    <div class="modal-bg" id="modal">
+        <div class="modal-box glass">
+            <div class="mi"><i class="bi bi-exclamation-triangle"></i></div>
+            <h4 id="modalTitle">Are you sure?</h4>
+            <p id="modalText"></p>
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn-glass" id="modalCancel">Cancel</button>
+                <button class="btn-danger-soft" id="modalOk">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-s" id="toast"><i class="bi bi-check-circle-fill"></i><span></span></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        /*
+         * DEMO SETTINGS STORE
+         * There is no backend yet, so settings are saved in this browser's localStorage (key "ga_settings").
+         * Later these values will be loaded from / saved to the backend settings API.
+         */
+        const DEFAULTS = {
+            // General
+            uniName: 'GeoAttend University', uniShort: 'GAU', uniEmail: 'info@geoattend.edu', uniPhone: '', uniAddress: '',
+            academicYear: '2026-2027', semester: 'Fall', timezone: 'Asia/Karachi',
+            semStart: '2026-09-01', semEnd: '2027-01-15',
+            workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+            dateFormat: 'DD/MM/YYYY', timeFormat: '12h', logo: '',
+            // Profile
+            adminName: 'Admin', adminEmail: 'admin@geoattend.edu', adminPhone: '', adminTitle: 'Super Administrator', photo: '',
+            // Attendance
+            sessionDuration: 15, lateAfter: 10, absentAfter: 15, autoClose: true, lateCountsPresent: true,
+            minAttendance: 75, teacherEdit: true, editWindow: '24', singleCheckin: true,
+            // Geofence & GPS
+            campusLat: 33.6844, campusLng: 73.0479, defaultRadius: 50,
+            maxAccuracy: 50, highAccuracy: true, mockDetect: true, qrVerify: false, qrInterval: '15', deviceBind: true, storeLocation: true,
+            // Notifications
+            chEmail: true, chPush: true, chSms: false,
+            nSessionStart: true, nReminder: '5', nLowAttendance: true, nParents: false, nNewUser: true, nSuspicious: true,
+            quietOn: false, quietFrom: '22:00', quietTo: '07:00',
+            // Users
+            regStudents: true, regTeachers: true, regApproval: true, emailDomain: '', rollFormat: 'AA00-AAA-000',
+            departments: ['Computer Science', 'Software Engineering', 'Information Technology', 'Artificial Intelligence', 'Mathematics', 'Electrical Engineering', 'Business Administration'],
+            // Security
+            twoFactor: false, sessionTimeout: '30', maxAttempts: '5', pwMinLength: 8, pwStrong: true, pwExpiry: '0',
+            // Reports & data
+            repDaily: false, repWeekly: true, repMonthly: true, exportFormat: 'pdf',
+            autoBackup: true, backupFreq: 'weekly', retention: '4', lastBackup: ''
+        };
+        const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const $ = id => document.getElementById(id);
+
+        const store = {
+            load() { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ga_settings') || '{}') }; } catch { return { ...DEFAULTS }; } },
+            save(s) { try { localStorage.setItem('ga_settings', JSON.stringify(s)); return true; } catch { return false; } }
+        };
+
+        let saved = store.load();      // last saved state
+        let state = clone(saved);      // working copy (with unsaved edits)
+        function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        /* ---------- Helpers ---------- */
+        function toast(msg, type = 'success') {
+            const t = $('toast');
+            t.className = 'toast-s ' + type;
+            t.querySelector('i').className = 'bi ' + (type === 'error' ? 'bi-x-circle-fill' : 'bi-check-circle-fill');
+            t.querySelector('span').textContent = msg;
+            t.classList.add('show');
+            clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
+        }
+        function confirmBox(title, text, okLabel) {
+            return new Promise(resolve => {
+                $('modalTitle').textContent = title;
+                $('modalText').textContent = text;
+                $('modalOk').textContent = okLabel || 'Confirm';
+                $('modal').classList.add('show');
+                const done = v => { $('modal').classList.remove('show'); $('modalOk').onclick = $('modalCancel').onclick = null; resolve(v); };
+                $('modalOk').onclick = () => done(true);
+                $('modalCancel').onclick = () => done(false);
+            });
+        }
+        function initials(name) { return (name || 'A').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(); }
+        function isDirty() { return JSON.stringify(state) !== JSON.stringify(saved); }
+        function refreshDirty() { $('saveBar').classList.toggle('show', isDirty()); }
+
+        /* ---------- Bind simple fields (data-key) ---------- */
+        const fields = [...document.querySelectorAll('[data-key]')];
+        function fillFields() {
+            fields.forEach(el => {
+                const v = state[el.dataset.key];
+                if (el.type === 'checkbox') el.checked = !!v;
+                else if (el.type === 'radio') el.checked = el.value === v;
+                else el.value = v ?? '';
+            });
+            renderWorkDays(); renderDepts(); renderImages(); renderOutputs(); renderBackup();
+            if (window.campusMap) syncMap(true);
+        }
+        fields.forEach(el => {
+            const evt = (el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT') ? 'change' : 'input';
+            el.addEventListener(evt, () => {
+                let v;
+                if (el.type === 'checkbox') v = el.checked;
+                else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
+                else if (el.type === 'number' || el.type === 'range') v = el.value === '' ? '' : Number(el.value);
+                else v = el.value;
+                state[el.dataset.key] = v;
+                el.classList.remove('invalid');
+                renderOutputs();
+                if (el.dataset.key === 'adminName') renderImages();
+                if (['campusLat', 'campusLng', 'defaultRadius'].includes(el.dataset.key)) syncMap(el.dataset.key !== 'defaultRadius');
+                refreshDirty();
+            });
+        });
+
+        function renderOutputs() {
+            $('minAttOut').textContent = state.minAttendance + '%';
+            $('radiusOut').textContent = state.defaultRadius + ' m';
+        }
+
+        /* ---------- Working days ---------- */
+        function renderWorkDays() {
+            $('workDays').innerHTML = DAYS.map(d => `
+                <label><input type="checkbox" value="${d}" ${state.workDays.includes(d) ? 'checked' : ''}><span>${d}</span></label>`).join('');
+            $('workDays').querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+                state.workDays = DAYS.filter(d => $('workDays').querySelector(`input[value="${d}"]`).checked);
+                refreshDirty();
+            }));
+        }
+
+        /* ---------- Departments ---------- */
+        function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function renderDepts() {
+            $('deptList').innerHTML = state.departments.map((d, i) => `
+                <label><span>${escapeHtml(d)} <i class="bi bi-x-lg" data-del="${i}" style="cursor:pointer;font-size:11px;margin-left:4px" title="Remove"></i></span></label>`).join('')
+                || '<span class="f-help">No departments yet.</span>';
+            $('deptList').querySelectorAll('[data-del]').forEach(x => x.addEventListener('click', () => {
+                state.departments.splice(+x.dataset.del, 1); renderDepts(); refreshDirty();
+            }));
+        }
+        $('deptForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const v = $('deptInput').value.trim();
+            if (!v) return;
+            if (state.departments.some(d => d.toLowerCase() === v.toLowerCase())) return toast('That department already exists.', 'error');
+            state.departments.push(v); $('deptInput').value = ''; renderDepts(); refreshDirty();
+        });
+
+        /* ---------- Logo & profile photo ---------- */
+        function renderImages() {
+            $('logoBox').innerHTML = state.logo ? `<img src="${state.logo}" alt="University logo">` : '<i class="bi bi-image"></i>';
+            const ini = initials(state.adminName);
+            [$('bigAvatar'), $('topAvatar')].forEach(a => {
+                a.style.backgroundImage = state.photo ? `url(${state.photo})` : '';
+                a.style.backgroundSize = 'cover';
+                a.textContent = state.photo ? '' : ini;
+            });
+            $('profileNameView').textContent = state.adminName || 'Admin';
+            $('topName').textContent = saved.adminName || 'Admin';
+        }
+        function readImage(input, key) {
+            const f = input.files[0];
+            input.value = '';
+            if (!f) return;
+            if (f.size > 1024 * 1024) return toast('Image must be smaller than 1 MB.', 'error');
+            const r = new FileReader();
+            r.onload = () => { state[key] = r.result; renderImages(); refreshDirty(); };
+            r.readAsDataURL(f);
+        }
+        $('logoInput').addEventListener('change', e => readImage(e.target, 'logo'));
+        $('photoInput').addEventListener('change', e => readImage(e.target, 'photo'));
+        $('logoRemove').addEventListener('click', () => { state.logo = ''; renderImages(); refreshDirty(); });
+        $('photoRemove').addEventListener('click', () => { state.photo = ''; renderImages(); refreshDirty(); });
+
+        /* ---------- Map (campus centre + default radius) ---------- */
+        let marker, circle;
+        function initMap() {
+            if (window.campusMap) return;
+            window.campusMap = L.map('settingsMap', { scrollWheelZoom: false }).setView([state.campusLat, state.campusLng], 16);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors', className: 'soft-tiles' }).addTo(campusMap);
+            marker = L.marker([state.campusLat, state.campusLng], { draggable: true }).addTo(campusMap);
+            circle = L.circle([state.campusLat, state.campusLng], { radius: state.defaultRadius, color: '#4338ca', weight: 2, fillColor: '#4338ca', fillOpacity: .14 }).addTo(campusMap);
+            const setPos = ll => {
+                state.campusLat = +ll.lat.toFixed(6); state.campusLng = +ll.lng.toFixed(6);
+                $('campusLat').value = state.campusLat; $('campusLng').value = state.campusLng;
+                syncMap(false); refreshDirty();
+            };
+            marker.on('drag', e => circle.setLatLng(e.latlng));
+            marker.on('dragend', e => setPos(e.target.getLatLng()));
+            campusMap.on('click', e => setPos(e.latlng));
+        }
+        function syncMap(recenter) {
+            if (!window.campusMap) return;
+            const lat = Number(state.campusLat), lng = Number(state.campusLng);
+            if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+            marker.setLatLng([lat, lng]); circle.setLatLng([lat, lng]); circle.setRadius(Number(state.defaultRadius) || 10);
+            if (recenter) campusMap.setView([lat, lng]);
+        }
+
+        /* ---------- Section navigation ---------- */
+        function showSection(name) {
+            if (!$('sec-' + name)) name = 'general';
+            document.querySelectorAll('#settingsNav a').forEach(a => a.classList.toggle('active', a.dataset.sec === name));
+            document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + name));
+            if (name === 'geofence') { initMap(); setTimeout(() => campusMap.invalidateSize(), 50); }
+            const link = document.querySelector(`#settingsNav a[data-sec="${name}"]`);
+            if (link && window.innerWidth < 992) link.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+        }
+        document.querySelectorAll('#settingsNav a').forEach(a => a.addEventListener('click', e => {
+            e.preventDefault();
+            history.replaceState(null, '', '#' + a.dataset.sec);
+            showSection(a.dataset.sec);
+        }));
+
+        /* ---------- Search settings ---------- */
+        $('settingSearch').addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const q = e.target.value.trim().toLowerCase();
+            if (!q) return;
+            const row = [...document.querySelectorAll('.s-row, .card-head, .col-md-4, .col-md-6, .col-md-8, .col-12')]
+                .find(r => r.textContent.toLowerCase().includes(q));
+            if (!row) return toast('No setting matches "' + e.target.value + '".', 'error');
+            const sec = row.closest('.section').id.replace('sec-', '');
+            showSection(sec);
+            history.replaceState(null, '', '#' + sec);
+            setTimeout(() => {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                row.animate([{ background: 'rgba(67,56,202,.12)' }, { background: 'transparent' }], { duration: 1600 });
+            }, 60);
+        });
+
+        /* ---------- Validation + Save / Discard ---------- */
+        function validate() {
+            const errs = [];
+            const bad = (key, msg) => { errs.push(msg); const el = document.querySelector(`[data-key="${key}"]`); if (el) el.classList.add('invalid'); };
+            if (!String(state.uniName).trim()) bad('uniName', 'University name is required.');
+            if (state.adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.adminEmail)) bad('adminEmail', 'Admin email is not valid.');
+            if (state.uniEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.uniEmail)) bad('uniEmail', 'University email is not valid.');
+            if (!(state.sessionDuration >= 1)) bad('sessionDuration', 'Session duration must be at least 1 minute.');
+            if (!(state.lateAfter >= 0)) bad('lateAfter', 'Late time cannot be empty.');
+            if (!(state.absentAfter > state.lateAfter)) bad('absentAfter', '"Absent after" must be later than "Late after".');
+            if (state.absentAfter > state.sessionDuration) bad('absentAfter', '"Absent after" cannot be longer than the session duration.');
+            if (!(Math.abs(state.campusLat) <= 90) || state.campusLat === '') bad('campusLat', 'Latitude must be between -90 and 90.');
+            if (!(Math.abs(state.campusLng) <= 180) || state.campusLng === '') bad('campusLng', 'Longitude must be between -180 and 180.');
+            if (!(state.maxAccuracy >= 5)) bad('maxAccuracy', 'GPS accuracy limit must be at least 5 m.');
+            if (!(state.pwMinLength >= 6)) bad('pwMinLength', 'Minimum password length must be at least 6.');
+            if (state.semStart && state.semEnd && state.semEnd <= state.semStart) bad('semEnd', 'Semester end must be after the start date.');
+            if (!state.workDays.length) errs.push('Select at least one working day.');
+            return errs;
+        }
+        function save() {
+            document.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+            const errs = validate();
+            if (errs.length) {
+                const first = document.querySelector('.invalid');
+                if (first) { showSection(first.closest('.section').id.replace('sec-', '')); setTimeout(() => first.focus(), 60); }
+                return toast(errs[0], 'error');
+            }
+            if (!store.save(state)) return toast('Could not save — browser storage is unavailable.', 'error');
+            saved = clone(state);
+            renderImages(); refreshDirty();
+            toast('Settings saved successfully.');
+        }
+        $('saveBtn').addEventListener('click', save);
+        $('saveTop').addEventListener('click', () => isDirty() ? save() : toast('No changes to save.'));
+        $('discardBtn').addEventListener('click', () => {
+            document.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+            state = clone(saved); fillFields(); refreshDirty(); toast('Changes discarded.');
+        });
+        window.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (isDirty()) save(); }
+        });
+        window.addEventListener('beforeunload', e => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+        /* ---------- Change password (demo account) ---------- */
+        $('pwForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const cur = $('pwCurrent'), nw = $('pwNew'), cf = $('pwConfirm');
+            [cur, nw, cf].forEach(i => i.classList.remove('invalid'));
+            let overrides = {};
+            try { overrides = JSON.parse(localStorage.getItem('ga_pw_reset') || '{}'); } catch {}
+            const actual = overrides['admin@geoattend.edu'] || 'Admin@123'; // demo admin (see DEMO_ACCOUNTS.md)
+            const minLen = saved.pwMinLength || 8;
+            if (cur.value !== actual) { cur.classList.add('invalid'); return toast('Current password is incorrect.', 'error'); }
+            if (nw.value.length < minLen) { nw.classList.add('invalid'); return toast(`New password must be at least ${minLen} characters.`, 'error'); }
+            if (saved.pwStrong && !(/[a-z]/.test(nw.value) && /[A-Z]/.test(nw.value) && /\d/.test(nw.value) && /[^A-Za-z0-9]/.test(nw.value))) {
+                nw.classList.add('invalid'); return toast('Use upper & lower case letters, a number and a symbol.', 'error');
+            }
+            if (nw.value === cur.value) { nw.classList.add('invalid'); return toast('New password must be different.', 'error'); }
+            if (nw.value !== cf.value) { cf.classList.add('invalid'); return toast('Passwords do not match.', 'error'); }
+            overrides['admin@geoattend.edu'] = nw.value;
+            try { localStorage.setItem('ga_pw_reset', JSON.stringify(overrides)); } catch {}
+            $('pwForm').reset();
+            toast('Password updated successfully.');
+        });
+
+        /* ---------- Active sessions (sample) ---------- */
+        let devices = [
+            { icon: 'bi-laptop', name: 'Windows · Chrome', place: 'Islamabad, PK', when: 'Active now', current: true },
+            { icon: 'bi-phone', name: 'Android · GeoAttend App', place: 'Islamabad, PK', when: '2 hours ago' },
+            { icon: 'bi-tablet', name: 'iPad · Safari', place: 'Rawalpindi, PK', when: 'Yesterday, 4:12 PM' }
+        ];
+        function renderDevices() {
+            $('deviceList').innerHTML = devices.map((d, i) => `
+                <div class="device">
+                    <div class="di"><i class="bi ${d.icon}"></i></div>
+                    <div class="flex-grow-1"><b>${d.name}${d.current ? '<span class="tag-now">This device</span>' : ''}</b><small>${d.place} · ${d.when}</small></div>
+                    ${d.current ? '' : `<button class="link-btn" data-rm="${i}">Sign out</button>`}
+                </div>`).join('');
+            $('deviceList').querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+                devices.splice(+b.dataset.rm, 1); renderDevices(); toast('Device signed out.');
+            }));
+        }
+        $('logoutAll').addEventListener('click', async () => {
+            if (devices.length === 1) return toast('No other devices are signed in.');
+            if (await confirmBox('Sign out other devices?', 'All other devices will be signed out of your admin account.', 'Sign out')) {
+                devices = devices.filter(d => d.current); renderDevices(); toast('Signed out of all other devices.');
+            }
+        });
+
+        /* ---------- Backup / export / danger zone ---------- */
+        function renderBackup() {
+            $('lastBackup').textContent = saved.lastBackup ? 'Last backup: ' + new Date(saved.lastBackup).toLocaleString() : 'No backup yet';
+        }
+        $('backupNow').addEventListener('click', () => {
+            const btn = $('backupNow');
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Backing up…';
+            setTimeout(() => {
+                saved.lastBackup = state.lastBackup = new Date().toISOString();
+                const tmp = { ...saved }; store.save(tmp);
+                btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> Back up now';
+                renderBackup(); refreshDirty();
+                toast('Backup completed (demo).');
+            }, 1200);
+        });
+        $('exportBtn').addEventListener('click', () => {
+            const data = { ...saved }; delete data.logo; delete data.photo;
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = 'geoattend-settings.json'; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            toast('Settings exported.');
+        });
+        $('resetSettings').addEventListener('click', async () => {
+            if (!await confirmBox('Reset all settings?', 'Every setting will go back to its default value. This cannot be undone.', 'Reset')) return;
+            state = clone(DEFAULTS); store.save(state); saved = clone(state);
+            fillFields(); refreshDirty(); toast('Settings reset to defaults.');
+        });
+        $('clearData').addEventListener('click', async () => {
+            if (!await confirmBox('Clear demo data?', 'Demo sign-ups and password changes saved in this browser will be deleted. The demo admin password goes back to its original value.', 'Clear data')) return;
+            try { ['ga_users', 'ga_pw_reset', 'ga_remember'].forEach(k => localStorage.removeItem(k)); } catch {}
+            toast('Demo data cleared.');
+        });
+
+        /* ---------- Sidebar / logout ---------- */
+        const toggleNav = () => document.body.classList.toggle('nav-open');
+        $('menuToggle').addEventListener('click', toggleNav);
+        $('overlay').addEventListener('click', toggleNav);
+        $('logoutBtn').addEventListener('click', () => { try { sessionStorage.removeItem('ga_session'); } catch (e) {} });
+
+        /* ---------- Init ---------- */
+        fillFields();
+        renderDevices();
+        showSection(location.hash.slice(1) || 'general');
+    </script>
+</body>
+</html>
