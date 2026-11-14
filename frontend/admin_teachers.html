@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teachers | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        /* ---------- Teacher-specific bits ---------- */
+        .st-leave { color: #0369a1; background: rgba(2,132,199,.12); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .live-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.8s infinite; }
+        .course-tag { background: rgba(67,56,202,.08); color: var(--primary); }
+        .tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 130px; white-space: normal; }
+        .load { min-width: 96px; }
+        .load .row-between { font-size: 12px; }
+        .load .pct-bar { margin-top: 4px; }
+        .s-card .tags { justify-content: center; max-width: none; margin-top: 8px; }
+        .s-card .desig { font-size: 12px; font-weight: 700; color: var(--primary); }
+
+        /* Timetable in profile */
+        .tt { display: grid; grid-template-columns: 52px repeat(5, 1fr); gap: 4px; font-size: 11.5px; }
+        .tt .h { font-weight: 700; color: var(--muted); text-align: center; padding: 4px 0; }
+        .tt .t { color: var(--muted); font-weight: 600; padding: 6px 0; }
+        .tt .c { min-height: 34px; border-radius: 8px; background: rgba(27,34,64,.03); }
+        .tt .slot { border-radius: 8px; padding: 5px 6px; font-weight: 700; color: #fff; line-height: 1.25; animation: fxIn .35s ease backwards; }
+        .tt .slot small { display: block; font-weight: 500; opacity: .9; font-size: 10.5px; }
+
+        .course-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+        .course-row:last-child { border-bottom: 0; }
+        .course-row .cc { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: 11px; color: var(--primary); background: rgba(67,56,202,.10); flex-shrink: 0; }
+        .course-row b { font-size: 13.5px; display: block; }
+        .course-row small { color: var(--muted); font-size: 12px; }
+        .course-row .rm { margin-left: auto; border: 0; background: transparent; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+        .course-row .rm:hover { color: var(--rose); background: rgba(244,63,94,.08); }
+        .assign { display: flex; gap: 8px; margin-top: 12px; }
+        .assign .f-select { flex: 1; }
+
+        .perm { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+        .perm:last-child { border-bottom: 0; }
+        .perm b { font-size: 13.5px; display: block; }
+        .perm small { font-size: 12px; color: var(--muted); }
+
+        .act-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+        .act-row:last-child { border-bottom: 0; }
+        .act-row .ai { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(2,132,199,.1); color: var(--sky); flex-shrink: 0; }
+        .act-row b { color: var(--ink); font-size: 13px; display: block; }
+        .act-row small { color: var(--muted); font-size: 12px; }
+        .act-row .when { margin-left: auto; text-align: right; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="admin_students.html"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="admin_teachers.html" class="active"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="admin_courses.html"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search teachers by name, employee ID or course...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Teachers</div>
+                <h2>Teachers</h2>
+                <p>Manage faculty accounts, course assignments, timetables and permissions.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn-glass" id="importBtn"><i class="bi bi-upload"></i> Import CSV</button>
+                <button class="btn-glass" id="exportBtn"><i class="bi bi-download"></i> Export</button>
+                <button class="btn-primary-grad" id="addBtn"><i class="bi bi-person-plus"></i> Add Teacher</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="row g-3 mb-4" id="stats">
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-person-video3"></i></div><div><div class="label">Total Teachers</div><div class="value" id="sTotal">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-broadcast"></i></div><div><div class="label">Teaching Now</div><div class="value" id="sLive">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="stat-icon"><i class="bi bi-journal-bookmark-fill"></i></div><div><div class="label">Courses Assigned</div><div class="value" id="sCourses">0</div></div></div></div>
+            <div class="col-6 col-md-6 col-xl"><div class="stat glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="stat-icon"><i class="bi bi-journal-x"></i></div><div><div class="label">Unassigned Courses</div><div class="value" id="sUnassigned">0</div></div></div></div>
+            <div class="col-12 col-md-6 col-xl"><div class="stat glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="stat-icon"><i class="bi bi-hourglass-split"></i></div><div><div class="label">Pending Approval</div><div class="value" id="sPending">0</div></div></div></div>
+        </div>
+
+        <div class="panel glass">
+            <div class="status-chips chips" id="statusChips"></div>
+            <div class="toolbar">
+                <div class="tb-search"><i class="bi bi-search"></i><input class="f-input" id="search" placeholder="Search name, employee ID, email, course"></div>
+                <select class="f-select" id="fDept" aria-label="Department"></select>
+                <select class="f-select" id="fDesig" aria-label="Designation"></select>
+                <div class="seg" id="viewSeg">
+                    <button class="active" data-v="table" title="Table view" aria-label="Table view"><i class="bi bi-list-ul"></i></button>
+                    <button data-v="grid" title="Card view" aria-label="Card view"><i class="bi bi-grid-3x3-gap"></i></button>
+                </div>
+            </div>
+
+            <div class="bulk" id="bulk">
+                <b id="bulkCount">0 selected</b>
+                <button class="btn-glass" data-bulk="approve"><i class="bi bi-check2-circle"></i> Approve</button>
+                <button class="btn-glass" data-bulk="activate"><i class="bi bi-toggle-on"></i> Activate</button>
+                <button class="btn-glass" data-bulk="deactivate"><i class="bi bi-toggle-off"></i> Deactivate</button>
+                <button class="btn-glass" data-bulk="notify"><i class="bi bi-send"></i> Notify</button>
+                <button class="btn-glass" data-bulk="export"><i class="bi bi-download"></i> Export</button>
+                <button class="btn-danger-soft" data-bulk="delete" style="padding:7px 12px;font-size:12.5px"><i class="bi bi-trash3"></i> Delete</button>
+                <button class="link-btn clear" data-bulk="clear">Clear selection</button>
+            </div>
+
+            <div id="listArea"></div>
+            <div class="pager" id="pager"></div>
+        </div>
+    </main>
+
+    <!-- ================= ADD / EDIT DRAWER ================= -->
+    <div class="drawer-shade" id="shade"></div>
+    <aside class="drawer glass" id="formDrawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3 id="formTitle">Add Teacher</h3><p>Fields marked * are required.</p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form class="drawer-body" id="tForm" novalidate>
+            <div class="row g-3">
+                <div class="col-12"><label class="f-label" for="fName">Full name *</label><input class="f-input" id="fName" maxlength="50" placeholder="e.g. Dr. Sana Malik"></div>
+                <div class="col-sm-6"><label class="f-label" for="fEmp">Employee ID *</label><input class="f-input" id="fEmp" maxlength="12" placeholder="EMP-1042"></div>
+                <div class="col-sm-6"><label class="f-label" for="fStatus">Status</label>
+                    <select class="f-select" id="fStatus"><option value="active">Active</option><option value="leave">On leave</option><option value="pending">Pending approval</option><option value="inactive">Inactive</option></select></div>
+                <div class="col-sm-6"><label class="f-label" for="fDesigIn">Designation *</label><select class="f-select" id="fDesigIn"></select></div>
+                <div class="col-sm-6"><label class="f-label" for="fDeptIn">Department *</label><select class="f-select" id="fDeptIn"></select></div>
+                <div class="col-sm-6"><label class="f-label" for="fEmail">University email *</label><input class="f-input" id="fEmail" type="email" placeholder="name@university.edu"></div>
+                <div class="col-sm-6"><label class="f-label" for="fPhone">Phone</label><input class="f-input" id="fPhone" placeholder="+92 300 1234567"></div>
+                <div class="col-sm-6"><label class="f-label" for="fOffice">Office</label><input class="f-input" id="fOffice" maxlength="30" placeholder="e.g. Block B, Room 12"></div>
+                <div class="col-sm-6"><label class="f-label" for="fJoined">Joining date</label><input class="f-input" id="fJoined" type="date"></div>
+                <div class="col-12"><label class="f-label" for="fQual">Qualification</label><input class="f-input" id="fQual" maxlength="60" placeholder="e.g. PhD Computer Science"></div>
+                <div class="col-12">
+                    <label class="f-label">Assigned courses</label>
+                    <div class="chips" id="fCourses"></div>
+                    <div class="f-help">Courses already taught by someone else are marked with ●. Selecting one moves it to this teacher.</div>
+                </div>
+            </div>
+            <button type="submit" hidden></button>
+        </form>
+        <div class="drawer-foot">
+            <button type="button" class="btn-glass" data-close>Cancel</button>
+            <button type="button" class="btn-primary-grad" id="saveBtn"><i class="bi bi-check2-circle"></i> Save Teacher</button>
+        </div>
+    </aside>
+
+    <!-- ================= PROFILE DRAWER ================= -->
+    <aside class="drawer glass wide" id="profileDrawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3>Teacher Profile</h3><p id="pSub"></p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="drawer-body" id="pBody"></div>
+        <div class="drawer-foot" id="pFoot"></div>
+    </aside>
+
+    <!-- ================= NOTIFY MODAL ================= -->
+    <div class="n-modal" id="notifyModal">
+        <div class="box glass">
+            <h4><i class="bi bi-send text-primary"></i> Send Notification</h4>
+            <p id="notifyTo"></p>
+            <div class="field"><label class="f-label" for="nTitle">Title</label><input class="f-input" id="nTitle" maxlength="60" placeholder="e.g. Faculty meeting at 2 PM"></div>
+            <div class="field"><label class="f-label" for="nMsg">Message</label><textarea class="f-input" id="nMsg" maxlength="250" placeholder="Write your message..."></textarea></div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn-glass" id="nCancel">Cancel</button>
+                <button class="btn-primary-grad" id="nSend"><i class="bi bi-send"></i> Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= IMPORT MODAL ================= -->
+    <div class="n-modal" id="importModal">
+        <div class="box glass">
+            <h4><i class="bi bi-upload text-primary"></i> Import Teachers</h4>
+            <p>Upload a CSV file with columns: <b>name, employee_id, email, phone, department, designation</b>.</p>
+            <label class="import-drop" id="drop">
+                <i class="bi bi-filetype-csv"></i>
+                <b>Click to choose a CSV file</b><br>or drag and drop it here
+                <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+            </label>
+            <div class="d-flex gap-2 justify-content-between align-items-center mt-3">
+                <button class="link-btn px-0" id="templateBtn"><i class="bi bi-file-earmark-arrow-down"></i> Download template</button>
+                <button class="btn-glass" id="iCancel">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/data.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * DEMO TEACHER STORE
+         * No backend yet: teachers are kept in this browser's localStorage (key "ga_teachers").
+         * Teachers who sign up on login.html (key "ga_users", role "teacher") show up here as "Pending approval".
+         * Later this page will use the backend teachers API instead.
+         */
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const SETTINGS = (() => { try { return JSON.parse(localStorage.getItem('ga_settings')) || {}; } catch { return {}; } })();
+        const MIN_ATT = SETTINGS.minAttendance || 75;
+        const MAX_CREDITS = 12;   // weekly teaching load limit used for the workload bar
+
+        const DEPTS = GA.DEPARTMENTS;
+        const DESIGS = ['Professor', 'Associate Professor', 'Assistant Professor', 'Lecturer', 'Lab Engineer'];
+        // Course catalogue comes from the shared data (assets/data.js) — the same courses as the Courses page.
+        // "students" = how many (non-pending) students are enrolled in the course.
+        const ENROLLED = GA.loadStudents().filter(s => s.status !== 'pending');
+        const COURSES = Object.fromEntries(GA.loadCourses().map(c => [c.code, { ...c, students: ENROLLED.filter(s => s.courses.includes(c.code)).length }]));
+        const LIVE = GA.liveCodes();   // courses with a session running right now
+        const DAYN = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+        const STATUS = { active: ['Active', 'st-active'], leave: ['On leave', 'st-leave'], pending: ['Pending', 'st-pending'], inactive: ['Inactive', 'st-inactive'] };
+        const PERMS = [
+            ['startSessions', 'Start attendance sessions', 'Open and close sessions for assigned courses.'],
+            ['editAttendance', 'Edit attendance records', 'Change a student\'s status after a session (within the edit window in Settings).'],
+            ['manageGeofences', 'Manage geofences', 'Create or change classroom geofences for their courses.'],
+            ['exportReports', 'Export reports', 'Download attendance reports for their courses.']
+        ];
+
+        const hash = GA.hash, rng = GA.rng;
+        function persist() { GA.saveTeachers(teachers); }
+        let teachers = GA.loadTeachers();
+        teachers.forEach(t => t.courses = t.courses.filter(c => COURSES[c]));   // drop courses deleted on the Courses page
+
+        // Teachers who registered on the Sign Up page appear here as pending
+        (function importSignups() {
+            let users = [];
+            try { users = JSON.parse(localStorage.getItem('ga_users')) || []; } catch {}
+            let added = 0;
+            users.filter(u => u.role === 'teacher').forEach(u => {
+                if (teachers.some(t => t.email.toLowerCase() === (u.email || '').toLowerCase())) return;
+                teachers.push({
+                    id: 'u' + hash(u.email), name: u.name, emp: (u.id || '').toUpperCase(), desig: 'Lecturer', dept: DEPTS.includes(u.dept) ? u.dept : 'Computer Science',
+                    courses: [], status: 'pending', qual: '', email: u.email, phone: '', office: '', joined: new Date().toISOString().slice(0, 10),
+                    perms: { startSessions: true, editAttendance: true, manageGeofences: false, exportReports: true }, source: 'signup'
+                });
+                added++;
+            });
+            if (added) persist();
+        })();
+
+        /* ---------- Derived values ---------- */
+        const initials = n => n.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, '').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const color = t => PALETTE[hash(t.id) % PALETTE.length];
+        const credits = t => t.courses.reduce((a, c) => a + (COURSES[c]?.cr || 0), 0);
+        const liveCourse = t => t.status === 'active' ? t.courses.find(c => LIVE.includes(c)) : null;
+        const courseAtt = c => 72 + (hash(c + 'att') % 24);   // sample average attendance per course
+        const avgAtt = t => t.courses.length ? t.courses.reduce((a, c) => a + courseAtt(c), 0) / t.courses.length : null;
+        const ownerOf = (c, exceptId) => teachers.find(t => t.id !== exceptId && t.courses.includes(c));
+        const barColor = p => p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+        const loadColor = cr => cr > MAX_CREDITS ? 'linear-gradient(90deg,#fb7185,#f43f5e)' : cr >= MAX_CREDITS - 3 ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#818cf8,#4338ca)';
+        // time clash: two courses meeting on the same day at the same time
+        function clash(list) {
+            for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+                const a = COURSES[list[i]], b = COURSES[list[j]];
+                if (a && b && a.time === b.time && a.days.some(d => b.days.includes(d))) return [list[i], list[j], DAYN[a.days.find(d => b.days.includes(d))]];
+            }
+            return null;
+        }
+
+        /* ---------- Filters ---------- */
+        $('fDept').innerHTML = '<option value="">All departments</option>' + DEPTS.map(d => `<option>${d}</option>`).join('');
+        $('fDesig').innerHTML = '<option value="">All designations</option>' + DESIGS.map(d => `<option>${d}</option>`).join('');
+        $('fDeptIn').innerHTML = DEPTS.map(d => `<option>${d}</option>`).join('');
+        $('fDesigIn').innerHTML = DESIGS.map(d => `<option>${d}</option>`).join('');
+
+        let status = 'all', query = '', sortKey = 'name', sortDir = 1, page = 1, perPage = 10;
+        let view = window.innerWidth < 768 ? 'grid' : 'table';
+        const selected = new Set();
+
+        function renderChips() {
+            const c = {
+                all: teachers.length, active: teachers.filter(t => t.status === 'active').length, live: teachers.filter(liveCourse).length,
+                leave: teachers.filter(t => t.status === 'leave').length, pending: teachers.filter(t => t.status === 'pending').length,
+                inactive: teachers.filter(t => t.status === 'inactive').length, nocourse: teachers.filter(t => t.status === 'active' && !t.courses.length).length
+            };
+            const chips = [['all', 'All', 'bi-people'], ['active', 'Active', 'bi-person-check'], ['live', 'Teaching now', 'bi-broadcast'], ['leave', 'On leave', 'bi-airplane'],
+                ['pending', 'Pending', 'bi-hourglass-split'], ['inactive', 'Inactive', 'bi-person-dash'], ['nocourse', 'No courses', 'bi-journal-x']];
+            $('statusChips').innerHTML = chips.map(([k, l, i]) => `<label><input type="radio" name="st" value="${k}" ${status === k ? 'checked' : ''}><span><i class="bi ${i}"></i> ${l} <span class="cnt">${c[k]}</span></span></label>`).join('');
+        }
+
+        function filtered() {
+            const q = query.toLowerCase(), dept = $('fDept').value, desig = $('fDesig').value;
+            return teachers.filter(t => {
+                if (status === 'live') { if (!liveCourse(t)) return false; }
+                else if (status === 'nocourse') { if (t.status !== 'active' || t.courses.length) return false; }
+                else if (status !== 'all' && t.status !== status) return false;
+                if (dept && t.dept !== dept) return false;
+                if (desig && t.desig !== desig) return false;
+                if (q && ![t.name, t.emp, t.email, t.phone, t.dept, t.desig, ...t.courses, ...t.courses.map(c => COURSES[c]?.name || '')].join(' ').toLowerCase().includes(q)) return false;
+                return true;
+            }).sort((a, b) => {
+                const v = { name: x => x.name.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, ''), dept: x => x.dept, load: x => credits(x), att: x => avgAtt(x) ?? -1, status: x => x.status }[sortKey];
+                const x = v(a), y = v(b);
+                return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir;
+            });
+        }
+
+        /* ---------- Render ---------- */
+        function setStat(id, v) { const el = $(id); if (el.textContent !== String(v)) { const first = el.dataset.init !== '1'; el.textContent = v; el.dataset.init = '1'; if (!first) fx.bump(el); } }
+        function renderStats() {
+            const assigned = new Set(teachers.flatMap(t => t.courses));
+            setStat('sTotal', teachers.length);
+            setStat('sLive', teachers.filter(liveCourse).length);
+            setStat('sCourses', assigned.size);
+            setStat('sUnassigned', Object.keys(COURSES).filter(c => !assigned.has(c)).length);
+            setStat('sPending', teachers.filter(t => t.status === 'pending').length);
+        }
+        const courseTags = t => t.courses.length ? t.courses.map(c => `<span class="tag course-tag" title="${COURSES[c]?.name || ''}">${c}</span>`).join('') : '<span class="f-help m-0">No courses</span>';
+        function loadCell(t) {
+            const cr = credits(t);
+            return `<div class="load"><div class="row-between"><span>${cr} / ${MAX_CREDITS} cr</span></div><div class="pct-bar"><span style="width:${Math.min(100, cr / MAX_CREDITS * 100)}%;background:${loadColor(cr)}"></span></div></div>`;
+        }
+        function attCell(t) {
+            const p = avgAtt(t);
+            if (p === null) return '<span class="f-help m-0">—</span>';
+            return `<div class="pct-cell"><div class="pct-bar"><span style="width:${p.toFixed(1)}%;background:${barColor(p)}"></span></div><b>${p.toFixed(0)}%</b></div>`;
+        }
+        function statusTag(t) {
+            const lc = liveCourse(t);
+            return `<span class="tag ${STATUS[t.status][1]}">${STATUS[t.status][0]}</span>${lc ? `<br><span class="tag live-tag mt-1" title="${COURSES[lc].room}">LIVE · ${lc}</span>` : ''}`;
+        }
+        function actions(t) {
+            return `<div class="row-act">
+                ${t.status === 'pending' ? `<button class="ok" data-act="approve" data-id="${t.id}" title="Approve" aria-label="Approve ${esc(t.name)}"><i class="bi bi-check2-circle"></i></button>` : ''}
+                <button data-act="view" data-id="${t.id}" title="View profile" aria-label="View ${esc(t.name)}"><i class="bi bi-eye"></i></button>
+                <button data-act="edit" data-id="${t.id}" title="Edit" aria-label="Edit ${esc(t.name)}"><i class="bi bi-pencil"></i></button>
+                <button class="del" data-act="delete" data-id="${t.id}" title="Delete" aria-label="Delete ${esc(t.name)}"><i class="bi bi-trash3"></i></button>
+            </div>`;
+        }
+
+        function render(animate) {
+            renderStats(); renderChips();
+            const rows = filtered();
+            const pages = Math.max(1, Math.ceil(rows.length / perPage));
+            if (page > pages) page = pages;
+            const shown = rows.slice((page - 1) * perPage, page * perPage);
+            const allChecked = shown.length && shown.every(t => selected.has(t.id));
+
+            if (!rows.length) {
+                $('listArea').innerHTML = `<div class="empty"><i class="bi bi-person-x"></i><b>No teachers found</b>Try changing the filters or search.</div>`;
+            } else if (view === 'table') {
+                const th = (k, l) => `<th data-sort="${k}" class="${sortKey === k ? 'sorted' : ''}">${l}<i class="bi ${sortKey === k ? (sortDir > 0 ? 'bi-sort-up' : 'bi-sort-down') : 'bi-arrow-down-up'}"></i></th>`;
+                $('listArea').innerHTML = `
+                    <div class="table-responsive"><table class="table table-glass">
+                        <thead><tr>
+                            <th style="width:36px"><input type="checkbox" class="ck" id="ckAll" ${allChecked ? 'checked' : ''} aria-label="Select all on this page"></th>
+                            ${th('name', 'Teacher')}${th('dept', 'Department')}<th>Courses</th>${th('load', 'Workload')}${th('att', 'Class Attendance')}${th('status', 'Status')}<th></th>
+                        </tr></thead>
+                        <tbody>${shown.map(t => `
+                            <tr data-row="${t.id}" class="${selected.has(t.id) ? 'checked' : ''}">
+                                <td><input type="checkbox" class="ck" data-ck="${t.id}" ${selected.has(t.id) ? 'checked' : ''} aria-label="Select ${esc(t.name)}"></td>
+                                <td><div class="person"><div class="ini" style="background:${color(t)}">${initials(t.name)}</div><div><b>${esc(t.name)}</b><small title="${esc(t.email)}">${esc(t.emp)}</small></div></div></td>
+                                <td>${esc(t.dept)}<br><small class="text-muted">${esc(t.desig)}</small></td>
+                                <td><div class="tags">${courseTags(t)}</div></td>
+                                <td>${loadCell(t)}</td>
+                                <td>${attCell(t)}</td>
+                                <td>${statusTag(t)}</td>
+                                <td>${actions(t)}</td>
+                            </tr>`).join('')}</tbody>
+                    </table></div>`;
+                if (animate) fx.enter('#listArea tbody tr');
+            } else {
+                $('listArea').innerHTML = `<div class="s-grid">${shown.map(t => {
+                    const p = avgAtt(t);
+                    const ring = p === null ? 'conic-gradient(#e2e8f0 0 100%)' : `conic-gradient(${p >= 85 ? '#10b981' : p >= MIN_ATT ? '#f59e0b' : '#f43f5e'} ${p}%, rgba(27,34,64,.08) 0)`;
+                    const lc = liveCourse(t);
+                    return `
+                    <div class="s-card ${selected.has(t.id) ? 'checked' : ''}" data-row="${t.id}">
+                        <input type="checkbox" class="ck" data-ck="${t.id}" ${selected.has(t.id) ? 'checked' : ''} aria-label="Select ${esc(t.name)}">
+                        <span class="tag ${lc ? 'live-tag' : STATUS[t.status][1]}">${lc ? 'LIVE · ' + lc : STATUS[t.status][0]}</span>
+                        <div class="ring" style="background:${ring}"><div class="ini" style="background:${color(t)}">${initials(t.name)}</div><small>${p === null ? '—' : p.toFixed(0) + '%'}</small></div>
+                        <b>${esc(t.name)}</b>
+                        <div class="desig">${esc(t.desig)}</div>
+                        <div class="meta">${esc(t.dept)} · ${credits(t)} cr</div>
+                        <div class="tags">${courseTags(t)}</div>
+                        <div class="foot">
+                            ${t.status === 'pending' ? `<button class="btn-primary-grad" data-act="approve" data-id="${t.id}"><i class="bi bi-check2"></i> Approve</button>` : `<button class="btn-glass" data-act="view" data-id="${t.id}"><i class="bi bi-eye"></i> View</button>`}
+                            <button class="btn-glass" data-act="edit" data-id="${t.id}" aria-label="Edit ${esc(t.name)}"><i class="bi bi-pencil"></i></button>
+                        </div>
+                    </div>`;
+                }).join('')}</div>`;
+                if (animate) fx.enter('#listArea .s-card');
+            }
+
+            const start = rows.length ? (page - 1) * perPage + 1 : 0;
+            let btns = `<button data-pg="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>`;
+            for (let p = 1; p <= pages; p++) btns += `<button data-pg="${p}" class="${p === page ? 'cur' : ''}">${p}</button>`;
+            btns += `<button data-pg="${page + 1}" ${page === pages ? 'disabled' : ''} aria-label="Next page"><i class="bi bi-chevron-right"></i></button>`;
+            $('pager').innerHTML = `
+                <span>Showing ${start}–${Math.min(page * perPage, rows.length)} of ${rows.length} teachers
+                    · <select class="f-select d-inline-block" id="perPage" aria-label="Rows per page">${[10, 20, 50].map(n => `<option ${n === perPage ? 'selected' : ''}>${n}</option>`).join('')}</select> per page</span>
+                <div class="pg">${btns}</div>`;
+            renderBulk();
+        }
+        function renderBulk() {
+            $('bulk').classList.toggle('show', selected.size > 0);
+            $('bulkCount').textContent = `${selected.size} selected`;
+            document.querySelector('[data-bulk="approve"]').style.display = teachers.some(t => selected.has(t.id) && t.status === 'pending') ? '' : 'none';
+        }
+
+        /* ---------- List interactions ---------- */
+        $('listArea').addEventListener('click', e => {
+            const ck = e.target.closest('[data-ck]');
+            if (ck) { e.stopPropagation(); ck.checked ? selected.add(ck.dataset.ck) : selected.delete(ck.dataset.ck); ck.closest('[data-row]').classList.toggle('checked', ck.checked); const all = $('ckAll'); if (all) all.checked = [...document.querySelectorAll('#listArea [data-ck]')].every(c => c.checked); renderBulk(); return; }
+            if (e.target.id === 'ckAll') { document.querySelectorAll('#listArea [data-ck]').forEach(c => e.target.checked ? selected.add(c.dataset.ck) : selected.delete(c.dataset.ck)); render(false); return; }
+            const th = e.target.closest('th[data-sort]');
+            if (th) { if (sortKey === th.dataset.sort) sortDir *= -1; else { sortKey = th.dataset.sort; sortDir = ['load', 'att'].includes(sortKey) ? -1 : 1; } render(false); return; }
+            const btn = e.target.closest('[data-act]');
+            if (btn) { e.stopPropagation(); return act(btn.dataset.act, btn.dataset.id); }
+            const row = e.target.closest('[data-row]');
+            if (row) openProfile(row.dataset.row);
+        });
+        $('pager').addEventListener('click', e => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; page = +b.dataset.pg; render(true); });
+        $('pager').addEventListener('change', e => { if (e.target.id === 'perPage') { perPage = +e.target.value; page = 1; render(true); } });
+        $('statusChips').addEventListener('change', e => { status = e.target.value; page = 1; render(true); });
+        ['fDept', 'fDesig'].forEach(id => $(id).addEventListener('change', () => { page = 1; render(true); }));
+        let st;
+        const onSearch = v => { clearTimeout(st); st = setTimeout(() => { query = v.trim(); page = 1; render(true); }, 180); };
+        $('search').addEventListener('input', e => { $('topSearch').value = e.target.value; onSearch(e.target.value); });
+        $('topSearch').addEventListener('input', e => { $('search').value = e.target.value; onSearch(e.target.value); });
+        $('viewSeg').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b || b.dataset.v === view) return;
+            view = b.dataset.v; document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('active', x === b)); render(true);
+        });
+        document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('active', x.dataset.v === view));
+
+        async function act(a, id) {
+            const t = teachers.find(x => x.id === id);
+            if (!t) return;
+            if (a === 'view') return openProfile(id);
+            if (a === 'edit') return openForm(id);
+            if (a === 'approve') { t.status = 'active'; persist(); render(false); return ui.toast(`${t.name} approved.`); }
+            if (a === 'delete') {
+                const extra = t.courses.length ? ` Their ${t.courses.length} course${t.courses.length > 1 ? 's' : ''} (${t.courses.join(', ')}) will become unassigned.` : '';
+                if (!await ui.confirm('Delete teacher?', `${t.name} (${t.emp}) will be removed.${extra}`, 'Delete')) return;
+                teachers = teachers.filter(x => x.id !== id); selected.delete(id); persist(); closeDrawers(); render(false); ui.toast('Teacher deleted.');
+            }
+        }
+
+        $('bulk').addEventListener('click', async e => {
+            const b = e.target.closest('[data-bulk]'); if (!b) return;
+            const sel = teachers.filter(t => selected.has(t.id)), k = b.dataset.bulk, n = sel.length, s = n === 1 ? '' : 's';
+            if (k === 'clear') { selected.clear(); return render(false); }
+            if (k === 'export') return exportCsv(sel, 'selected');
+            if (k === 'notify') return openNotify(sel);
+            if (k === 'approve') { const p = sel.filter(t => t.status === 'pending'); p.forEach(t => t.status = 'active'); persist(); render(false); return ui.toast(`${p.length} teacher${p.length === 1 ? '' : 's'} approved.`); }
+            if (k === 'activate' || k === 'deactivate') { sel.forEach(t => t.status = k === 'activate' ? 'active' : 'inactive'); persist(); render(false); return ui.toast(`${n} teacher${s} ${k}d.`, k === 'activate' ? 'success' : 'info'); }
+            if (k === 'delete') {
+                if (!await ui.confirm(`Delete ${n} teacher${s}?`, 'Their accounts will be removed and their courses will become unassigned. This cannot be undone.', 'Delete all')) return;
+                teachers = teachers.filter(t => !selected.has(t.id)); selected.clear(); persist(); render(false); ui.toast('Selected teachers deleted.');
+            }
+        });
+
+        /* ================= ADD / EDIT FORM ================= */
+        let editing = null;
+        function fillCourseChips(chosen) {
+            $('fCourses').innerHTML = Object.entries(COURSES).map(([c, info]) => {
+                const owner = ownerOf(c, editing);
+                return `<label title="${info.name} · ${info.cr} cr · ${info.days.map(d => DAYN[d]).join('/')} ${info.time}${owner ? ' · taught by ' + owner.name : ''}"><input type="checkbox" value="${c}" ${chosen.includes(c) ? 'checked' : ''}><span>${c}${owner ? ' <span style="color:#f59e0b">●</span>' : ''}</span></label>`;
+            }).join('');
+        }
+        function openForm(id) {
+            const t = id ? teachers.find(x => x.id === id) : null;
+            editing = t ? t.id : null;
+            closeDrawers(true);
+            $('formTitle').textContent = t ? 'Edit Teacher' : 'Add Teacher';
+            const d = t || { name: '', emp: '', desig: 'Lecturer', dept: DEPTS[0], email: '', phone: '', office: '', joined: new Date().toISOString().slice(0, 10), qual: '', status: 'active', courses: [] };
+            $('fName').value = d.name; $('fEmp').value = d.emp; $('fDesigIn').value = d.desig; $('fDeptIn').value = d.dept;
+            $('fEmail').value = d.email; $('fPhone').value = d.phone; $('fOffice').value = d.office; $('fJoined').value = d.joined;
+            $('fQual').value = d.qual; $('fStatus').value = d.status;
+            fillCourseChips(d.courses);
+            document.querySelectorAll('#tForm .invalid').forEach(el => el.classList.remove('invalid'));
+            showDrawer('formDrawer');
+            if (window.innerWidth >= 576) setTimeout(() => $('fName').focus(), 300);
+        }
+        async function saveForm() {
+            document.querySelectorAll('#tForm .invalid').forEach(el => el.classList.remove('invalid'));
+            const name = $('fName').value.trim(), emp = $('fEmp').value.trim().toUpperCase(), email = $('fEmail').value.trim().toLowerCase(), phone = $('fPhone').value.trim();
+            const bad = (id, msg) => { $(id).classList.add('invalid'); $(id).focus(); ui.toast(msg, 'error'); };
+            if (!name) return bad('fName', 'Please enter the teacher\'s name.');
+            if (!/^EMP-\d{3,6}$/.test(emp)) return bad('fEmp', 'Employee ID should look like EMP-1042.');
+            if (teachers.some(t => t.id !== editing && t.emp === emp)) return bad('fEmp', 'Another teacher already has this employee ID.');
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('fEmail', 'Please enter a valid email address.');
+            if (SETTINGS.emailDomain && !email.endsWith('@' + SETTINGS.emailDomain.toLowerCase())) return bad('fEmail', `Email must end with @${SETTINGS.emailDomain}.`);
+            if (teachers.some(t => t.id !== editing && t.email === email)) return bad('fEmail', 'Another teacher already uses this email.');
+            if (phone && !/^\+?[\d\s-]{10,16}$/.test(phone)) return bad('fPhone', 'Please enter a valid phone number.');
+            const courses = [...document.querySelectorAll('#fCourses input:checked')].map(c => c.value);
+            const cl = clash(courses);
+            if (cl) return ui.toast(`Timetable clash: ${cl[0]} and ${cl[1]} both meet on ${cl[2]} at ${COURSES[cl[0]].time}.`, 'error');
+            const moving = courses.map(c => [c, ownerOf(c, editing)]).filter(([, o]) => o);
+            if (moving.length && !await ui.confirm('Reassign courses?', moving.map(([c, o]) => `${c} from ${o.name}`).join(', ') + ' will be moved to this teacher.', 'Reassign')) return;
+            moving.forEach(([c, o]) => o.courses = o.courses.filter(x => x !== c));
+
+            const data = { name, emp, email, phone, desig: $('fDesigIn').value, dept: $('fDeptIn').value, office: $('fOffice').value.trim(), joined: $('fJoined').value, qual: $('fQual').value.trim(), status: $('fStatus').value, courses };
+            let id = editing;
+            if (editing) Object.assign(teachers.find(t => t.id === editing), data);
+            else { id = 't' + Date.now(); teachers.unshift({ id, ...data, perms: { startSessions: true, editAttendance: true, manageGeofences: false, exportReports: true }, source: 'admin' }); }
+            persist();
+            const wasEditing = editing;
+            closeDrawers();
+            if (!wasEditing) { status = 'all'; query = ''; $('search').value = $('topSearch').value = ''; page = 1; }
+            render(false);
+            const row = document.querySelector(`[data-row="${id}"]`);
+            if (row) { row.scrollIntoView({ block: 'nearest' }); fx.enter([row]); }
+            ui.toast(wasEditing ? 'Teacher updated.' : 'Teacher added.');
+        }
+        $('saveBtn').addEventListener('click', saveForm);
+        $('tForm').addEventListener('submit', e => { e.preventDefault(); saveForm(); });
+        $('addBtn').addEventListener('click', () => openForm(null));
+
+        /* ================= PROFILE ================= */
+        let profileId = null, profileTab = 'info';
+        function activity(t) {
+            // sample: recent sessions this teacher ran (deterministic)
+            const r = rng(hash(t.id + 'act')), out = [];
+            if (!t.courses.length || t.status === 'pending') return out;
+            const d = new Date(); d.setHours(0, 0, 0, 0);
+            for (let back = 0; back < 21 && out.length < 7; back++) {
+                const day = new Date(d.getTime() - back * 864e5), wd = day.getDay();
+                t.courses.forEach(c => {
+                    const info = COURSES[c];
+                    if (!info.days.includes(wd) || out.length >= 7) return;
+                    const present = Math.round(info.students * (courseAtt(c) / 100) * (0.92 + r() * 0.1));
+                    out.push({ c, day, info, present: Math.min(present, info.students), mins: 10 + Math.floor(r() * 6) });
+                });
+            }
+            return out;
+        }
+        function openProfile(id, tab) {
+            const t = teachers.find(x => x.id === id);
+            if (!t) return;
+            profileId = id; profileTab = tab || 'info';
+            closeDrawers(true);
+            const p = avgAtt(t), cr = credits(t), lc = liveCourse(t);
+            $('pSub').textContent = `${t.emp} · joined ${t.joined ? new Date(t.joined).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}`;
+
+            const times = [...new Set(t.courses.map(c => COURSES[c].time))].sort();
+            let tt = '<div class="tt"><div></div>' + DAYN.slice(1).map(d => `<div class="h">${d}</div>`).join('');
+            times.forEach(time => {
+                tt += `<div class="t">${time}</div>`;
+                for (let d = 1; d <= 5; d++) {
+                    const c = t.courses.find(x => COURSES[x].time === time && COURSES[x].days.includes(d));
+                    tt += c ? `<div class="slot" style="background:${PALETTE[hash(c) % PALETTE.length]}">${c}<small>${COURSES[c].room}</small></div>` : '<div class="c"></div>';
+                }
+            });
+            tt += '</div>';
+            const free = Object.keys(COURSES).filter(c => !t.courses.includes(c));
+
+            const acts = activity(t);
+            $('pBody').innerHTML = `
+                <div class="p-hero">
+                    <div class="ini" style="background:${color(t)}">${initials(t.name)}</div>
+                    <div style="min-width:0">
+                        <b>${esc(t.name)}</b>
+                        <small>${esc(t.desig)} · ${esc(t.dept)}</small><br>
+                        <span class="tag ${STATUS[t.status][1]} mt-1">${STATUS[t.status][0]}</span>
+                        ${lc ? `<span class="tag live-tag mt-1">Teaching ${lc} now · ${COURSES[lc].room}</span>` : ''}
+                    </div>
+                </div>
+                <div class="p-stats">
+                    <div><b>${t.courses.length}</b><span>Courses</span></div>
+                    <div><b>${t.courses.reduce((a, c) => a + COURSES[c].students, 0)}</b><span>Students</span></div>
+                    <div><b style="color:${cr > MAX_CREDITS ? '#f43f5e' : 'inherit'}">${cr}</b><span>Credit hrs</span></div>
+                    <div><b>${p === null ? '—' : p.toFixed(0) + '%'}</b><span>Class att.</span></div>
+                </div>
+                <div class="seg p-tabs" id="pTabs">
+                    <button data-t="info"><i class="bi bi-person-vcard"></i> Details</button>
+                    <button data-t="courses"><i class="bi bi-journal-bookmark"></i> Courses</button>
+                    <button data-t="activity"><i class="bi bi-clock-history"></i> Activity</button>
+                    <button data-t="perms"><i class="bi bi-shield-lock"></i> Access</button>
+                </div>
+                <div class="p-sec" data-sec="info">
+                    <div class="info-row"><span>Email</span><b>${esc(t.email)}</b></div>
+                    <div class="info-row"><span>Phone</span><b>${esc(t.phone) || '—'}</b></div>
+                    <div class="info-row"><span>Employee ID</span><b>${esc(t.emp)}</b></div>
+                    <div class="info-row"><span>Office</span><b>${esc(t.office) || '—'}</b></div>
+                    <div class="info-row"><span>Qualification</span><b>${esc(t.qual) || '—'}</b></div>
+                    <div class="info-row"><span>Joining date</span><b>${t.joined ? new Date(t.joined).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</b></div>
+                    <div class="info-row"><span>Account source</span><b>${t.source === 'signup' ? 'Self sign-up' : 'Added by admin'}</b></div>
+                </div>
+                <div class="p-sec" data-sec="courses">
+                    <div class="row-between mb-1"><h6 class="f-label m-0">Assigned courses</h6><small class="text-muted">${cr} of ${MAX_CREDITS} credit hours</small></div>
+                    <div class="pct-bar mb-2"><span style="width:${Math.min(100, cr / MAX_CREDITS * 100)}%;background:${loadColor(cr)}"></span></div>
+                    ${t.courses.length ? t.courses.map(c => {
+                        const i = COURSES[c], a = courseAtt(c);
+                        return `<div class="course-row">
+                            <div class="cc">${c}</div>
+                            <div style="min-width:0"><b>${i.name}</b><small>${i.days.map(d => DAYN[d]).join(' / ')} · ${i.time} · ${i.room} · ${i.students} students</small>
+                                <div class="pct-cell mt-1" style="max-width:220px"><div class="pct-bar"><span style="width:${a}%;background:${barColor(a)}"></span></div><b>${a}%</b></div></div>
+                            <button class="rm" data-unassign="${c}" title="Remove course" aria-label="Remove ${c}"><i class="bi bi-x-lg"></i></button>
+                        </div>`;
+                    }).join('') : '<div class="empty py-3"><i class="bi bi-journal-x"></i><b>No courses assigned</b>Assign a course below.</div>'}
+                    <div class="assign">
+                        <select class="f-select" id="assignSel" aria-label="Course to assign">
+                            <option value="">Assign a course…</option>
+                            ${free.map(c => { const o = ownerOf(c, t.id); return `<option value="${c}">${c} · ${COURSES[c].name}${o ? ' (taught by ' + o.name + ')' : ' (unassigned)'}</option>`; }).join('')}
+                        </select>
+                        <button class="btn-primary-grad" id="assignBtn"><i class="bi bi-plus-lg"></i> Assign</button>
+                    </div>
+                    ${t.courses.length ? `<h6 class="f-label mt-4 mb-2">Weekly timetable</h6>${tt}` : ''}
+                </div>
+                <div class="p-sec" data-sec="activity">
+                    ${acts.length ? acts.map(a => `
+                        <div class="act-row">
+                            <div class="ai"><i class="bi bi-broadcast"></i></div>
+                            <div style="min-width:0"><b>${a.c} session · ${a.info.room}</b><small>${a.present}/${a.info.students} present · open ${a.mins} min</small></div>
+                            <div class="when">${a.day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}<br>${a.info.time}</div>
+                        </div>`).join('') : '<div class="empty py-3"><i class="bi bi-clock-history"></i><b>No sessions yet</b>Sessions this teacher starts will appear here.</div>'}
+                </div>
+                <div class="p-sec" data-sec="perms">
+                    ${PERMS.map(([k, l, d]) => `
+                        <div class="perm"><div><b>${l}</b><small>${d}</small></div>
+                        <label class="switch-t"><input type="checkbox" data-perm="${k}" ${t.perms?.[k] ? 'checked' : ''}><span></span></label></div>`).join('')}
+                    <div class="note-box"><i class="bi bi-info-circle"></i><span>Teachers can only see and manage the courses assigned to them.</span></div>
+                </div>`;
+            $('pFoot').innerHTML = `<div class="p-actions w-100">
+                ${t.status === 'pending' ? '<button class="btn-primary-grad" data-p="approve"><i class="bi bi-check2-circle"></i> Approve</button>'
+                    : `<button class="btn-glass" data-p="leave"><i class="bi ${t.status === 'leave' ? 'bi-briefcase' : 'bi-airplane'}"></i> ${t.status === 'leave' ? 'Back from leave' : 'Mark on leave'}</button>`}
+                <button class="btn-glass" data-p="edit"><i class="bi bi-pencil"></i> Edit</button>
+                <button class="btn-glass" data-p="notify"><i class="bi bi-send"></i> Notify</button>
+                ${t.status === 'pending' ? '<button class="btn-glass" data-p="reset"><i class="bi bi-key"></i> Reset password</button>'
+                    : `<button class="btn-glass" data-p="toggle"><i class="bi ${t.status === 'inactive' ? 'bi-toggle-on' : 'bi-toggle-off'}"></i> ${t.status === 'inactive' ? 'Activate' : 'Deactivate'}</button>`}
+            </div>`;
+            switchTab(profileTab);
+            showDrawer('profileDrawer');
+        }
+        function switchTab(name) {
+            profileTab = name;
+            document.querySelectorAll('#pTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === name));
+            document.querySelectorAll('#pBody .p-sec').forEach(s => s.classList.toggle('active', s.dataset.sec === name));
+        }
+
+        $('profileDrawer').addEventListener('click', async e => {
+            const tab = e.target.closest('#pTabs button');
+            if (tab) return switchTab(tab.dataset.t);
+            const t = teachers.find(x => x.id === profileId);
+            if (!t) return;
+            const un = e.target.closest('[data-unassign]');
+            if (un) {
+                const c = un.dataset.unassign;
+                un.closest('.course-row').style.cssText = 'transition:all .25s;opacity:0;transform:translateX(30px)';
+                setTimeout(() => { t.courses = t.courses.filter(x => x !== c); persist(); render(false); openProfile(t.id, 'courses'); ui.toast(`${c} removed from ${t.name}.`, 'info'); }, 220);
+                return;
+            }
+            if (e.target.closest('#assignBtn')) {
+                const c = $('assignSel').value;
+                if (!c) { $('assignSel').classList.add('invalid'); return ui.toast('Choose a course to assign.', 'error'); }
+                const cl = clash(t.courses.concat(c));
+                if (cl) return ui.toast(`Timetable clash: ${cl[0]} and ${cl[1]} both meet on ${cl[2]} at ${COURSES[cl[0]].time}.`, 'error');
+                const owner = ownerOf(c, t.id);
+                if (owner && !await ui.confirm('Reassign course?', `${c} is taught by ${owner.name}. Move it to ${t.name}?`, 'Reassign')) return;
+                if (owner) owner.courses = owner.courses.filter(x => x !== c);
+                t.courses.push(c); persist(); render(false); openProfile(t.id, 'courses');
+                const row = [...document.querySelectorAll('.course-row')].find(r => r.querySelector('.cc').textContent === c);
+                if (row) fx.enter([row]);
+                if (credits(t) > MAX_CREDITS) ui.toast(`${c} assigned. ${t.name} is now over the ${MAX_CREDITS} credit-hour limit.`, 'info');
+                else ui.toast(`${c} assigned to ${t.name}.`);
+                return;
+            }
+            const b = e.target.closest('[data-p]'); if (!b) return;
+            const k = b.dataset.p;
+            if (k === 'edit') return openForm(t.id);
+            if (k === 'notify') return openNotify([t]);
+            if (k === 'approve') { t.status = 'active'; persist(); render(false); openProfile(t.id); return ui.toast(`${t.name} approved.`); }
+            if (k === 'leave') { t.status = t.status === 'leave' ? 'active' : 'leave'; persist(); render(false); openProfile(t.id); return ui.toast(t.status === 'leave' ? `${t.name} marked on leave.` : `${t.name} is back from leave.`, 'info'); }
+            if (k === 'toggle') { t.status = t.status === 'inactive' ? 'active' : 'inactive'; persist(); render(false); openProfile(t.id); return ui.toast(`${t.name} is now ${t.status}.`, t.status === 'active' ? 'success' : 'info'); }
+            if (k === 'reset') { fx.success(b, 'Link sent'); ui.toast(`Password reset link sent to ${t.email} (demo).`, 'info'); }
+        });
+        $('profileDrawer').addEventListener('change', e => {
+            const p = e.target.closest('[data-perm]');
+            if (p) {
+                const t = teachers.find(x => x.id === profileId);
+                t.perms = t.perms || {}; t.perms[p.dataset.perm] = p.checked; persist();
+                ui.toast(`${PERMS.find(x => x[0] === p.dataset.perm)[1]}: ${p.checked ? 'allowed' : 'not allowed'}.`, 'info');
+            }
+            if (e.target.id === 'assignSel') e.target.classList.remove('invalid');
+        });
+
+        /* ---------- Drawers ---------- */
+        function showDrawer(id) { $('shade').classList.add('show'); $(id).classList.add('show'); $(id).setAttribute('aria-hidden', 'false'); }
+        function closeDrawers(keepShade) {
+            ['formDrawer', 'profileDrawer'].forEach(id => { $(id).classList.remove('show'); $(id).setAttribute('aria-hidden', 'true'); });
+            if (!keepShade) $('shade').classList.remove('show');
+        }
+        $('shade').addEventListener('click', () => closeDrawers());
+        document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDrawers()));
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || document.querySelector('.modal-bg.show') || document.querySelector('.tb-pop.show')) return;
+            if (document.querySelector('.n-modal.show')) { document.querySelectorAll('.n-modal').forEach(m => m.classList.remove('show')); return; }
+            closeDrawers();
+        });
+
+        /* ================= NOTIFY ================= */
+        let notifyList = [];
+        function openNotify(list) {
+            notifyList = list;
+            $('notifyTo').textContent = list.length === 1 ? `To ${list[0].name} (${list[0].email})` : `To ${list.length} selected teachers`;
+            $('nTitle').value = ''; $('nMsg').value = ''; $('nTitle').classList.remove('invalid'); $('nMsg').classList.remove('invalid');
+            $('notifyModal').classList.add('show'); setTimeout(() => $('nTitle').focus(), 50);
+        }
+        $('nCancel').addEventListener('click', () => $('notifyModal').classList.remove('show'));
+        $('notifyModal').addEventListener('click', e => { if (e.target.id === 'notifyModal') $('notifyModal').classList.remove('show'); });
+        $('nSend').addEventListener('click', () => {
+            const t = $('nTitle').value.trim(), m = $('nMsg').value.trim();
+            if (!t) { $('nTitle').classList.add('invalid'); return ui.toast('Please enter a title.', 'error'); }
+            if (!m) { $('nMsg').classList.add('invalid'); return ui.toast('Please write a message.', 'error'); }
+            try {
+                const d = JSON.parse(localStorage.getItem('ga_notifications')) || null;
+                if (d && Array.isArray(d.sent)) {
+                    d.sent.push({ id: Date.now(), type: 'announcement', title: t, msg: m, audience: 'custom', audienceLabel: notifyList.length === 1 ? notifyList[0].name : `${notifyList.length} selected teachers`, channels: ['app', 'email'], at: Date.now() });
+                    localStorage.setItem('ga_notifications', JSON.stringify(d));
+                }
+            } catch {}
+            $('notifyModal').classList.remove('show');
+            ui.toast(`Notification sent to ${notifyList.length === 1 ? notifyList[0].name : notifyList.length + ' teachers'}.`);
+        });
+
+        /* ================= CSV EXPORT / IMPORT ================= */
+        function download(name, text) {
+            const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+        const csvLine = arr => arr.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+        function exportCsv(list, label) {
+            if (!list.length) return ui.toast('No teachers to export.', 'error');
+            const head = ['Name', 'Employee ID', 'Email', 'Phone', 'Department', 'Designation', 'Office', 'Qualification', 'Courses', 'Credit Hours', 'Avg Class Attendance %', 'Status'];
+            const rows = list.map(t => [t.name, t.emp, t.email, t.phone, t.dept, t.desig, t.office, t.qual, t.courses.join(' '), credits(t), avgAtt(t) === null ? '' : avgAtt(t).toFixed(1), STATUS[t.status][0]]);
+            download(`geoattend-teachers-${label}-${new Date().toISOString().slice(0, 10)}.csv`, [head, ...rows].map(csvLine).join('\r\n'));
+            ui.toast(`${list.length} teacher${list.length === 1 ? '' : 's'} exported.`);
+        }
+        $('exportBtn').addEventListener('click', () => { exportCsv(filtered(), 'list'); fx.success($('exportBtn'), 'Exported'); });
+        $('importBtn').addEventListener('click', () => $('importModal').classList.add('show'));
+        $('iCancel').addEventListener('click', () => $('importModal').classList.remove('show'));
+        $('importModal').addEventListener('click', e => { if (e.target.id === 'importModal') $('importModal').classList.remove('show'); });
+        $('templateBtn').addEventListener('click', () => download('geoattend-teachers-template.csv',
+            [['name', 'employee_id', 'email', 'phone', 'department', 'designation'], ['Dr. Ali Raza', 'EMP-2001', 'ali.raza@university.edu', '+92 300 1234567', 'Computer Science', 'Assistant Professor']].map(csvLine).join('\r\n')));
+        function parseCsv(text) {
+            const rows = []; let row = [], cell = '', q = false;
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+                else if (c === '"') q = true;
+                else if (c === ',') { row.push(cell); cell = ''; }
+                else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+                else cell += c;
+            }
+            if (cell || row.length) { row.push(cell); rows.push(row); }
+            return rows.filter(r => r.some(v => v.trim()));
+        }
+        function importFile(file) {
+            if (!file) return;
+            if (!/\.csv$/i.test(file.name)) return ui.toast('Please choose a .csv file.', 'error');
+            const reader = new FileReader();
+            reader.onload = () => {
+                const rows = parseCsv(String(reader.result).replace(/^﻿/, ''));
+                if (rows.length < 2) return ui.toast('The file has no teacher rows.', 'error');
+                const head = rows[0].map(h => h.trim().toLowerCase()), col = n => head.indexOf(n);
+                if (col('name') < 0 || col('employee_id') < 0 || col('email') < 0) return ui.toast('The file needs at least name, employee_id and email columns.', 'error');
+                let added = 0, skipped = 0;
+                rows.slice(1).forEach((r, i) => {
+                    const g = n => (col(n) >= 0 ? (r[col(n)] || '').trim() : '');
+                    const name = g('name'), emp = g('employee_id').toUpperCase(), email = g('email').toLowerCase();
+                    if (!name || !/^EMP-\d{3,6}$/.test(emp) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || teachers.some(t => t.emp === emp || t.email === email)) { skipped++; return; }
+                    teachers.unshift({
+                        id: 't' + Date.now() + i, name, emp, email, phone: g('phone'), dept: DEPTS.includes(g('department')) ? g('department') : DEPTS[0],
+                        desig: DESIGS.includes(g('designation')) ? g('designation') : 'Lecturer', office: '', qual: '', joined: new Date().toISOString().slice(0, 10),
+                        status: 'active', courses: [], perms: { startSessions: true, editAttendance: true, manageGeofences: false, exportReports: true }, source: 'admin'
+                    });
+                    added++;
+                });
+                persist(); $('importModal').classList.remove('show'); status = 'all'; page = 1; render(true);
+                ui.toast(`${added} teacher${added === 1 ? '' : 's'} imported${skipped ? `, ${skipped} skipped (missing data or duplicates)` : ''}.`, added ? 'success' : 'error');
+            };
+            reader.readAsText(file);
+        }
+        $('csvFile').addEventListener('change', e => { importFile(e.target.files[0]); e.target.value = ''; });
+        const drop = $('drop');
+        ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+        ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+        drop.addEventListener('drop', e => importFile(e.dataTransfer.files[0]));
+
+        /* ================= INIT ================= */
+        render(false);
+        fx.enter('.page-head, #stats > div, .main > .panel');
+        document.querySelectorAll('.stat .value').forEach(v => fx.countUp(v));
+        const params = new URLSearchParams(location.search);
+        if (params.get('new') === '1') setTimeout(() => openForm(null), 400);
+    </script>
+</body>
+</html>
