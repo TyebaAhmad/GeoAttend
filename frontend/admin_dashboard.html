@@ -4,8 +4,697 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | GeoAttend</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap, Icons, Leaflet -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+    <style>
+        :root {
+            --bg: #eef2fb;
+            --ink: #1b2240;
+            --ink-2: #4a5376;
+            --muted: #8a92b2;
+            --primary: #4338ca;
+            --primary-2: #6d5ce8;
+            --teal: #14b8a6;
+            --amber: #f59e0b;
+            --rose: #f43f5e;
+            --sky: #0284c7;
+
+            --glass: rgba(255, 255, 255, 0.58);
+            --glass-strong: rgba(255, 255, 255, 0.78);
+            --glass-border: rgba(255, 255, 255, 0.85);
+            --line: rgba(27, 34, 64, 0.08);
+            --shadow: 0 10px 30px -12px rgba(48, 56, 120, 0.22), 0 2px 6px rgba(48, 56, 120, 0.05);
+            --radius: 20px;
+            --sidebar-w: 264px;
+        }
+
+        * { box-sizing: border-box; }
+        a { text-decoration: none; }
+
+        body {
+            margin: 0;
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+            color: var(--ink);
+            background: var(--bg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ---------- Soft background blobs (behind the glass) ---------- */
+        .bg-blobs { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
+        .bg-blobs span {
+            position: absolute; border-radius: 50%; filter: blur(80px); opacity: .55;
+        }
+        .bg-blobs span:nth-child(1) { width: 520px; height: 520px; background: #c7c9ff; top: -160px; left: -120px; }
+        .bg-blobs span:nth-child(2) { width: 460px; height: 460px; background: #b9f1ea; bottom: -140px; right: -80px; }
+        .bg-blobs span:nth-child(3) { width: 380px; height: 380px; background: #ffe2c2; top: 35%; left: 45%; opacity: .4; }
+
+        /* ---------- Glass base ---------- */
+        .glass {
+            background: var(--glass);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        /* ---------- Sidebar ---------- */
+        .sidebar {
+            position: fixed; top: 16px; bottom: 16px; left: 16px;
+            width: var(--sidebar-w);
+            padding: 22px 16px;
+            display: flex; flex-direction: column;
+            z-index: 1040;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            transition: transform .3s ease;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; padding: 0 8px 22px; border-bottom: 1px solid var(--line); }
+        .brand-logo {
+            width: 42px; height: 42px; border-radius: 13px;
+            display: grid; place-items: center; color: #fff; font-size: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 8px 18px -6px rgba(67, 56, 202, .6);
+        }
+        .brand h1 { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -.3px; }
+        .brand small { color: var(--muted); font-size: 11.5px; font-weight: 500; }
+
+        .nav-label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; margin: 20px 12px 8px; }
+        .side-nav { list-style: none; padding: 0; margin: 0; }
+        .side-nav a {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; margin-bottom: 3px;
+            border-radius: 12px; border: 1px solid transparent;
+            color: var(--ink-2); font-size: 14px; font-weight: 600; text-decoration: none;
+            transition: all .2s ease;
+        }
+        .side-nav a i { font-size: 17px; }
+        .side-nav a:hover { background: rgba(255,255,255,.7); color: var(--ink); border-color: var(--glass-border); }
+        .side-nav a.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            color: #fff; box-shadow: 0 8px 18px -8px rgba(67, 56, 202, .7);
+        }
+        .side-nav .badge-pill {
+            margin-left: auto; font-size: 11px; font-weight: 700;
+            background: rgba(244, 63, 94, .12); color: var(--rose);
+            padding: 2px 8px; border-radius: 20px;
+        }
+        .sidebar-foot {
+            margin-top: auto; padding: 14px; border-radius: 16px;
+            background: linear-gradient(135deg, rgba(67, 56, 202,.10), rgba(20,184,166,.10));
+            border: 1px solid var(--glass-border);
+        }
+        .sidebar-foot p { font-size: 12.5px; color: var(--ink-2); margin: 4px 0 10px; }
+
+        /* ---------- Main ---------- */
+        .main { margin-left: calc(var(--sidebar-w) + 32px); padding: 16px 16px 32px 0; }
+
+        .topbar {
+            display: flex; align-items: center; gap: 14px;
+            padding: 12px 16px; margin-bottom: 22px;
+            position: sticky; top: 16px; z-index: 1030;
+        }
+        .search {
+            flex: 1; max-width: 420px; position: relative;
+        }
+        .search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+        .search input {
+            width: 100%; padding: 10px 14px 10px 40px;
+            background: rgba(255,255,255,.7); border: 1px solid var(--line);
+            border-radius: 12px; font-size: 14px; color: var(--ink); outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .search input:focus { border-color: rgba(67, 56, 202,.5); box-shadow: 0 0 0 4px rgba(67, 56, 202,.12); }
+        .icon-btn {
+            width: 42px; height: 42px; border-radius: 12px;
+            display: grid; place-items: center; position: relative;
+            background: rgba(255,255,255,.7); border: 1px solid var(--line);
+            color: var(--ink-2); font-size: 18px; cursor: pointer; transition: all .2s;
+        }
+        .icon-btn:hover { color: var(--primary); border-color: rgba(67, 56, 202,.35); }
+        .icon-btn .dot { position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); border: 2px solid #fff; }
+        .profile { display: flex; align-items: center; gap: 10px; padding-left: 14px; border-left: 1px solid var(--line); }
+        .avatar {
+            width: 40px; height: 40px; border-radius: 12px;
+            display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 14px;
+            background: linear-gradient(135deg, var(--teal), var(--sky));
+        }
+        .profile b { font-size: 14px; display: block; line-height: 1.2; }
+        .profile small { color: var(--muted); font-size: 12px; }
+        .menu-toggle { display: none; }
+
+        .page-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+        .page-head h2 { font-size: 26px; font-weight: 800; letter-spacing: -.5px; margin: 0; }
+        .page-head p { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+
+        .btn-glass {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+            background: rgba(255,255,255,.75); border: 1px solid var(--glass-border);
+            color: var(--ink); box-shadow: var(--shadow); transition: all .2s;
+        }
+        .btn-glass:hover { transform: translateY(-1px); color: var(--primary); }
+        .btn-primary-grad {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            border: 1px solid rgba(255,255,255,.4); color: #fff;
+            box-shadow: 0 10px 22px -10px rgba(67, 56, 202, .8); transition: all .2s;
+        }
+        .btn-primary-grad:hover { transform: translateY(-1px); color: #fff; filter: brightness(1.05); }
+
+        /* ---------- Stat cards ---------- */
+        .stat { padding: 20px; height: 100%; position: relative; overflow: hidden; transition: transform .25s ease; }
+        .stat:hover { transform: translateY(-3px); }
+        .stat::after {
+            content: ""; position: absolute; width: 120px; height: 120px; border-radius: 50%;
+            right: -50px; top: -50px; background: var(--tint); opacity: .09;
+        }
+        .stat-icon {
+            width: 46px; height: 46px; border-radius: 14px;
+            display: grid; place-items: center; font-size: 21px;
+            color: var(--tint); background: var(--tint-bg); border: 1px solid rgba(255,255,255,.9);
+        }
+        .stat .label { color: var(--muted); font-size: 13px; font-weight: 600; margin: 16px 0 4px; }
+        .stat .value { font-size: 28px; font-weight: 800; letter-spacing: -.5px; line-height: 1; }
+        .trend { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+        .trend.up { color: #0f9f6e; background: rgba(16, 185, 129, .12); }
+        .trend.down { color: var(--rose); background: rgba(244, 63, 94, .12); }
+        .stat .sub { color: var(--muted); font-size: 12px; margin-left: 6px; }
+
+        /* ---------- Panels ---------- */
+        .panel { padding: 22px; height: 100%; }
+        .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 10px; }
+        .panel-head h3 { font-size: 16.5px; font-weight: 700; margin: 0; }
+        .panel-head p { font-size: 12.5px; color: var(--muted); margin: 2px 0 0; }
+        .seg { display: inline-flex; background: rgba(27,34,64,.05); border-radius: 10px; padding: 3px; border: 1px solid var(--line); }
+        .seg button { border: 0; background: transparent; font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 5px 12px; border-radius: 8px; }
+        .seg button.active { background: #fff; color: var(--primary); box-shadow: 0 2px 6px rgba(48,56,120,.12); }
+        .link-more { font-size: 13px; font-weight: 600; color: var(--primary); text-decoration: none; }
+
+        .chart-box { position: relative; height: 280px; }
+
+        /* Donut legend */
+        .legend-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+        .legend-row:last-child { border-bottom: 0; }
+        .legend-row .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 8px; }
+        .donut-wrap { position: relative; height: 190px; }
+        .donut-center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+        .donut-center b { font-size: 26px; font-weight: 800; display: block; line-height: 1; }
+        .donut-center small { color: var(--muted); font-size: 12px; }
+
+        /* Live sessions */
+        .session {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px; border-radius: 14px; margin-bottom: 10px;
+            background: rgba(255,255,255,.6); border: 1px solid var(--glass-border);
+        }
+        .session:last-child { margin-bottom: 0; }
+        .session .code {
+            width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+            display: grid; place-items: center; font-weight: 800; font-size: 12px;
+            color: var(--primary); background: rgba(67, 56, 202,.10);
+        }
+        .session h6 { font-size: 14px; font-weight: 700; margin: 0; }
+        .session small { color: var(--muted); font-size: 12px; }
+        .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #0f9f6e; }
+        .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 0 rgba(16,185,129,.6); animation: pulse 1.8s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+        .progress-thin { height: 6px; border-radius: 6px; background: rgba(27,34,64,.07); overflow: hidden; margin-top: 6px; }
+        .progress-thin span { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--teal), var(--sky)); }
+
+        /* Map */
+        #geoMap { height: 300px; border-radius: 14px; border: 1px solid var(--glass-border); z-index: 1; }
+        .leaflet-container { font-family: inherit; background: #f4f6fc; }
+        .soft-tiles { filter: saturate(.45) brightness(1.06) contrast(.95); }
+        .geo-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,.75); border: 1px solid var(--line); color: var(--ink-2); }
+        .geo-chip i { color: var(--primary); }
+
+        /* Table */
+        .table-glass { margin: 0; --bs-table-bg: transparent; }
+        .table-glass thead th {
+            font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
+            color: var(--muted); border-bottom: 1px solid var(--line); padding: 10px 12px; white-space: nowrap;
+        }
+        .table-glass td { padding: 12px; vertical-align: middle; font-size: 13.5px; color: var(--ink-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+        .table-glass tbody tr { transition: background .2s; }
+        .table-glass tbody tr:hover { background: rgba(255,255,255,.55); }
+        .table-glass tbody tr:last-child td { border-bottom: 0; }
+        .person { display: flex; align-items: center; gap: 10px; }
+        .person .ini { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; }
+        .person b { color: var(--ink); font-size: 13.5px; display: block; }
+        .person small { color: var(--muted); font-size: 12px; }
+        .status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
+        .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .status.present { color: #0f9f6e; background: rgba(16,185,129,.12); }
+        .status.late { color: #c27803; background: rgba(245,158,11,.14); }
+        .status.absent { color: var(--rose); background: rgba(244,63,94,.12); }
+        .dist { font-variant-numeric: tabular-nums; }
+
+        /* Alerts */
+        .alert-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+        .alert-item:last-child { border-bottom: 0; padding-bottom: 0; }
+        .alert-item .ai { width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; display: grid; place-items: center; font-size: 16px; }
+        .alert-item b { font-size: 13.5px; display: block; }
+        .alert-item small { color: var(--muted); font-size: 12px; }
+        .pct { margin-left: auto; font-weight: 800; font-size: 14px; color: var(--rose); align-self: center; }
+
+        /* Overlay for mobile sidebar */
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(27,34,64,.25); backdrop-filter: blur(2px); z-index: 1035; }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 1199.98px) {
+            .sidebar { transform: translateX(calc(-100% - 24px)); }
+            body.nav-open .sidebar { transform: none; }
+            body.nav-open .overlay { display: block; }
+            .main { margin-left: 0; padding: 16px; }
+            .menu-toggle { display: grid; }
+        }
+        @media (max-width: 575.98px) {
+            .profile div, .search { display: none; }
+            .topbar { justify-content: space-between; }
+            .profile { border-left: 0; padding-left: 0; }
+            .page-head h2 { font-size: 22px; }
+            .panel { padding: 18px; }
+        }
+    </style>
 </head>
 <body>
 
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div>
+                <h1>GeoAttend</h1>
+                <small>Smart Attendance System</small>
+            </div>
+        </div>
+
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="#" class="active"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a></li>
+            <li><a href="#"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="#"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="#"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="#"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="#"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="#"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+
+        <div class="sidebar-foot">
+            <b style="font-size:13.5px"><i class="bi bi-file-earmark-bar-graph text-primary"></i> Monthly Report</b>
+            <p>November attendance report is ready to export.</p>
+            <a href="#" class="btn-primary-grad w-100 justify-content-center" style="padding:8px 12px;font-size:13px"><i class="bi bi-download"></i> Download</a>
+        </div>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+
+        <!-- Topbar -->
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search students, teachers, courses...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Calendar"><i class="bi bi-calendar3"></i></button>
+                <button class="icon-btn" aria-label="Notifications"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div>
+                        <b>Admin</b>
+                        <small>Super Administrator</small>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page heading -->
+        <div class="page-head">
+            <div>
+                <h2>Welcome back, Admin 👋</h2>
+                <p id="today">Here's what's happening across campus today.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="#" class="btn-glass"><i class="bi bi-person-plus"></i> Add User</a>
+                <a href="#" class="btn-primary-grad"><i class="bi bi-plus-lg"></i> New Geofence</a>
+            </div>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="row g-3 g-xl-4 mb-4">
+            <div class="col-6 col-lg-3">
+                <div class="stat glass" style="--tint:#4338ca; --tint-bg:rgba(67, 56, 202,.12)">
+                    <div class="stat-icon"><i class="bi bi-mortarboard-fill"></i></div>
+                    <div class="label">Total Students</div>
+                    <div class="value">2,846</div>
+                    <div class="mt-2"><span class="trend up"><i class="bi bi-arrow-up-short"></i>4.2%</span><span class="sub">this semester</span></div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="stat glass" style="--tint:#14b8a6; --tint-bg:rgba(20,184,166,.12)">
+                    <div class="stat-icon"><i class="bi bi-person-video3"></i></div>
+                    <div class="label">Total Teachers</div>
+                    <div class="value">128</div>
+                    <div class="mt-2"><span class="trend up"><i class="bi bi-arrow-up-short"></i>2 new</span><span class="sub">this month</span></div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="stat glass" style="--tint:#0284c7; --tint-bg:rgba(2,132,199,.12)">
+                    <div class="stat-icon"><i class="bi bi-journal-bookmark-fill"></i></div>
+                    <div class="label">Active Courses</div>
+                    <div class="value">86</div>
+                    <div class="mt-2"><span class="trend up"><i class="bi bi-broadcast"></i>7 live</span><span class="sub">sessions now</span></div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="stat glass" style="--tint:#f59e0b; --tint-bg:rgba(245,158,11,.14)">
+                    <div class="stat-icon"><i class="bi bi-clipboard2-check-fill"></i></div>
+                    <div class="label">Today's Attendance</div>
+                    <div class="value">87.4%</div>
+                    <div class="mt-2"><span class="trend down"><i class="bi bi-arrow-down-short"></i>1.3%</span><span class="sub">vs yesterday</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trend chart + Donut -->
+        <div class="row g-3 g-xl-4 mb-4">
+            <div class="col-xl-8">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Attendance Overview</h3>
+                            <p>Present, late and absent students over time</p>
+                        </div>
+                        <div class="seg" id="rangeSeg">
+                            <button class="active" data-range="week">Week</button>
+                            <button data-range="month">Month</button>
+                        </div>
+                    </div>
+                    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Today's Status</h3>
+                            <p>2,846 enrolled students</p>
+                        </div>
+                        <a href="#" class="link-more">Details</a>
+                    </div>
+                    <div class="donut-wrap">
+                        <canvas id="donutChart"></canvas>
+                        <div class="donut-center"><div><b>87.4%</b><small>Attendance</small></div></div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="legend-row"><span><span class="sw" style="background:#14b8a6"></span>Present</span><b>2,312</b></div>
+                        <div class="legend-row"><span><span class="sw" style="background:#f59e0b"></span>Late</span><b>176</b></div>
+                        <div class="legend-row"><span><span class="sw" style="background:#f43f5e"></span>Absent</span><b>358</b></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live sessions + Geofence map -->
+        <div class="row g-3 g-xl-4 mb-4">
+            <div class="col-xl-5">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Live Sessions</h3>
+                            <p>Attendance sessions running right now</p>
+                        </div>
+                        <a href="#" class="link-more">View all</a>
+                    </div>
+
+                    <div class="session">
+                        <div class="code">CS301</div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between"><h6>Database Systems</h6><span class="live">LIVE</span></div>
+                            <small>Dr. Sana Malik · Room B-204 · 50m radius</small>
+                            <div class="progress-thin"><span style="width:82%"></span></div>
+                        </div>
+                    </div>
+                    <div class="session">
+                        <div class="code">SE210</div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between"><h6>Software Engineering</h6><span class="live">LIVE</span></div>
+                            <small>Prof. Imran Ali · Lab 3 · 40m radius</small>
+                            <div class="progress-thin"><span style="width:64%"></span></div>
+                        </div>
+                    </div>
+                    <div class="session">
+                        <div class="code">AI402</div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between"><h6>Artificial Intelligence</h6><span class="live">LIVE</span></div>
+                            <small>Dr. Ayesha Khan · Hall A · 60m radius</small>
+                            <div class="progress-thin"><span style="width:91%"></span></div>
+                        </div>
+                    </div>
+                    <div class="session">
+                        <div class="code">MT105</div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between"><h6>Linear Algebra</h6><span class="live">LIVE</span></div>
+                            <small>Mr. Bilal Ahmed · Room C-110 · 45m radius</small>
+                            <div class="progress-thin"><span style="width:47%"></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-7">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Campus Geofences</h3>
+                            <p>Allowed attendance zones and live check-ins</p>
+                        </div>
+                        <span class="geo-chip"><i class="bi bi-bullseye"></i> 12 active zones</span>
+                    </div>
+                    <div id="geoMap"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent attendance + Low attendance alerts -->
+        <div class="row g-3 g-xl-4">
+            <div class="col-xl-8">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Recent Check-ins</h3>
+                            <p>Latest attendance marked through GPS verification</p>
+                        </div>
+                        <a href="#" class="link-more">View all records</a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-glass">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Course</th>
+                                    <th>Time</th>
+                                    <th>Distance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="checkinRows"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Low Attendance</h3>
+                            <p>Students below the 75% requirement</p>
+                        </div>
+                        <a href="#" class="link-more">Notify all</a>
+                    </div>
+                    <div id="lowList"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        /* ---------- Date ---------- */
+        document.getElementById('today').textContent =
+            new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+            ' — here\'s what\'s happening across campus today.';
+
+        /* ---------- Logout ---------- */
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            try { sessionStorage.removeItem('ga_session'); } catch (e) {}
+        });
+
+        /* ---------- Mobile sidebar ---------- */
+        const toggleNav = () => document.body.classList.toggle('nav-open');
+        document.getElementById('menuToggle').addEventListener('click', toggleNav);
+        document.getElementById('overlay').addEventListener('click', toggleNav);
+
+        /* ---------- Charts ---------- */
+        Chart.defaults.font.family = '"Plus Jakarta Sans", system-ui, sans-serif';
+        Chart.defaults.color = '#8a92b2';
+
+        const data = {
+            week: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+                present: [2410, 2365, 2298, 2440, 2312, 1980],
+                late:    [140, 162, 188, 121, 176, 150],
+                absent:  [296, 319, 360, 285, 358, 716]
+            },
+            month: {
+                labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+                present: [2380, 2342, 2401, 2310],
+                late:    [150, 171, 139, 168],
+                absent:  [316, 333, 306, 368]
+            }
+        };
+
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        const grad = (c1, c2) => { const g = ctx.createLinearGradient(0, 0, 0, 280); g.addColorStop(0, c1); g.addColorStop(1, c2); return g; };
+
+        const trend = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.week.labels,
+                datasets: [
+                    { label: 'Present', data: data.week.present, borderColor: '#4338ca', backgroundColor: grad('rgba(67, 56, 202,.25)', 'rgba(67, 56, 202,0)'), fill: true, tension: .4, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5 },
+                    { label: 'Late',    data: data.week.late,    borderColor: '#f59e0b', backgroundColor: 'transparent', tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5 },
+                    { label: 'Absent',  data: data.week.absent,  borderColor: '#f43f5e', backgroundColor: 'transparent', tension: .4, borderWidth: 2, borderDash: [5, 5], pointRadius: 0, pointHoverRadius: 5 }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16 } },
+                    tooltip: { backgroundColor: 'rgba(27,34,64,.92)', padding: 12, cornerRadius: 10, titleFont: { weight: 700 } }
+                },
+                scales: {
+                    x: { grid: { display: false }, border: { display: false } },
+                    y: { grid: { color: 'rgba(27,34,64,.06)' }, border: { display: false }, ticks: { maxTicksLimit: 5 } }
+                }
+            }
+        });
+
+        document.querySelectorAll('#rangeSeg button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#rangeSeg button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const d = data[btn.dataset.range];
+                trend.data.labels = d.labels;
+                trend.data.datasets[0].data = d.present;
+                trend.data.datasets[1].data = d.late;
+                trend.data.datasets[2].data = d.absent;
+                trend.update();
+            });
+        });
+
+        new Chart(document.getElementById('donutChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Present', 'Late', 'Absent'],
+                datasets: [{ data: [2312, 176, 358], backgroundColor: ['#14b8a6', '#f59e0b', '#f43f5e'], borderColor: 'rgba(255,255,255,.9)', borderWidth: 3, hoverOffset: 6 }]
+            },
+            options: { maintainAspectRatio: false, cutout: '76%', plugins: { legend: { display: false } } }
+        });
+
+        /* ---------- Geofence map (sample campus coordinates) ---------- */
+        const campus = [33.6844, 73.0479];
+        const map = L.map('geoMap', { zoomControl: true, scrollWheelZoom: false }).setView(campus, 17);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '&copy; OpenStreetMap contributors', className: 'soft-tiles'
+        }).addTo(map);
+
+        const zones = [
+            { name: 'Room B-204 · CS301', pos: [33.6849, 73.0472], r: 50, color: '#4338ca' },
+            { name: 'Lab 3 · SE210',      pos: [33.6838, 73.0486], r: 40, color: '#14b8a6' },
+            { name: 'Hall A · AI402',     pos: [33.6852, 73.0491], r: 60, color: '#0284c7' },
+            { name: 'Room C-110 · MT105', pos: [33.6835, 73.0466], r: 45, color: '#f59e0b' }
+        ];
+        zones.forEach(z => {
+            L.circle(z.pos, { radius: z.r, color: z.color, weight: 2, fillColor: z.color, fillOpacity: .15 })
+                .addTo(map).bindPopup(`<b>${z.name}</b><br>Radius: ${z.r} m`);
+            L.circleMarker(z.pos, { radius: 4, color: '#fff', weight: 2, fillColor: z.color, fillOpacity: 1 }).addTo(map);
+        });
+
+        /* ---------- Recent check-ins (sample data) ---------- */
+        const palette = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#6d5ce8', '#f43f5e'];
+        const checkins = [
+            { name: 'Hamza Raza',    id: 'FA21-BCS-045', course: 'CS301', time: '09:02 AM', dist: '12 m',  status: 'present' },
+            { name: 'Fatima Noor',   id: 'FA21-BCS-018', course: 'AI402', time: '09:04 AM', dist: '27 m',  status: 'present' },
+            { name: 'Usman Tariq',   id: 'FA22-BSE-063', course: 'SE210', time: '09:16 AM', dist: '33 m',  status: 'late' },
+            { name: 'Zainab Akhtar', id: 'FA22-BSE-011', course: 'SE210', time: '09:01 AM', dist: '8 m',   status: 'present' },
+            { name: 'Ali Hassan',    id: 'FA21-BCS-092', course: 'CS301', time: '—',        dist: '—',     status: 'absent' },
+            { name: 'Maryam Javed',  id: 'FA23-BMT-007', course: 'MT105', time: '09:19 AM', dist: '41 m',  status: 'late' }
+        ];
+        const initials = n => n.split(' ').map(w => w[0]).join('').slice(0, 2);
+        document.getElementById('checkinRows').innerHTML = checkins.map((c, i) => `
+            <tr>
+                <td><div class="person"><div class="ini" style="background:${palette[i % palette.length]}">${initials(c.name)}</div><div><b>${c.name}</b><small>${c.id}</small></div></div></td>
+                <td>${c.course}</td>
+                <td>${c.time}</td>
+                <td class="dist"><i class="bi bi-geo-alt text-muted"></i> ${c.dist}</td>
+                <td><span class="status ${c.status}">${c.status[0].toUpperCase() + c.status.slice(1)}</span></td>
+            </tr>`).join('');
+
+        /* ---------- Low attendance (sample data) ---------- */
+        const low = [
+            { name: 'Ali Hassan',    course: 'Database Systems',       pct: 58 },
+            { name: 'Saad Mehmood',  course: 'Linear Algebra',         pct: 64 },
+            { name: 'Hira Shahid',   course: 'Software Engineering',   pct: 69 },
+            { name: 'Omer Farooq',   course: 'Artificial Intelligence', pct: 72 }
+        ];
+        document.getElementById('lowList').innerHTML = low.map(s => `
+            <div class="alert-item">
+                <div class="ai" style="background:rgba(244,63,94,.10);color:#f43f5e"><i class="bi bi-exclamation-triangle"></i></div>
+                <div><b>${s.name}</b><small>${s.course}</small></div>
+                <div class="pct">${s.pct}%</div>
+            </div>`).join('');
+    </script>
 </body>
 </html>
