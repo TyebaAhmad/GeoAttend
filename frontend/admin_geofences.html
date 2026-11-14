@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geofences | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+
+    <style>
+        /* ---------- Map ---------- */
+        .map-wrap { position: relative; }
+        #zoneMap { height: 560px; border-radius: 16px; border: 1px solid var(--glass-border); z-index: 1; }
+        .leaflet-container { font-family: inherit; background: #f4f6fc; }
+        .soft-tiles { filter: saturate(.45) brightness(1.06) contrast(.95); }
+        .map-wrap.picking #zoneMap, .map-wrap.testing #zoneMap { cursor: crosshair; }
+        .map-tools { position: absolute; top: 12px; right: 12px; z-index: 500; display: flex; gap: 6px; }
+        .map-tools button {
+            width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 16px; cursor: pointer;
+            background: rgba(255,255,255,.92); border: 1px solid rgba(27,34,64,.1); color: var(--ink-2); box-shadow: 0 6px 16px -8px rgba(27,34,64,.4); transition: all .15s;
+        }
+        .map-tools button:hover { color: var(--primary); }
+        .map-banner {
+            position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 500; display: none; align-items: center; gap: 10px;
+            padding: 8px 8px 8px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; color: #fff;
+            background: rgba(27,34,64,.88); box-shadow: 0 10px 24px -10px rgba(0,0,0,.5); white-space: nowrap; max-width: calc(100% - 24px);
+        }
+        .map-banner.show { display: flex; animation: fxIn .3s ease; }
+        .map-banner button { border: 0; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.15); color: #fff; }
+        .map-banner button:hover { background: rgba(255,255,255,.25); }
+        .map-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+        .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .map-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+        /* Test-location result card on the map */
+        .test-card {
+            position: absolute; left: 12px; bottom: 12px; z-index: 500; width: 300px; max-width: calc(100% - 24px); max-height: 60%; overflow-y: auto;
+            padding: 14px; border-radius: 16px; background: rgba(255,255,255,.95); box-shadow: 0 16px 34px -14px rgba(27,34,64,.5);
+            border: 1px solid #fff; display: none;
+        }
+        .test-card.show { display: block; animation: fxIn .35s ease; }
+        .test-card .verdict { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .test-card .verdict i { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+        .test-card .verdict b { font-size: 14px; display: block; }
+        .test-card .verdict small { font-size: 12px; color: var(--muted); }
+        .test-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 6px 0; border-top: 1px dashed var(--line); }
+        .test-row span:first-child { color: var(--ink-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .in { color: #047857; font-weight: 700; white-space: nowrap; }
+        .out { color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+        /* ---------- Zone list ---------- */
+        .filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; margin-bottom: 10px; }
+        .filters::-webkit-scrollbar { display: none; }
+        .zone-list { position: relative; max-height: 548px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; scrollbar-width: thin; }
+        .zone {
+            display: flex; gap: 12px; padding: 12px; border-radius: 16px; margin-bottom: 8px; cursor: pointer;
+            background: rgba(255,255,255,.55); border: 1.5px solid transparent; transition: all .2s;
+        }
+        .zone:hover { background: rgba(255,255,255,.85); transform: translateX(3px); }
+        .zone.sel { border-color: var(--primary); background: #fff; box-shadow: 0 10px 22px -14px rgba(67,56,202,.6); }
+        .zone.off { opacity: .6; }
+        .z-ic { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; transition: transform .3s cubic-bezier(.3,1.6,.5,1); }
+        .zone:hover .z-ic { transform: rotate(-8deg) scale(1.08); }
+        .z-body { flex: 1; min-width: 0; }
+        .z-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .z-top b { font-size: 14px; }
+        .z-body small { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+        .z-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .z-act { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 6px; }
+        .z-btns { display: flex; gap: 2px; }
+        .z-btns button { border: 0; background: transparent; width: 28px; height: 28px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+        .z-btns button:hover { background: rgba(27,34,64,.06); color: var(--ink); }
+        .z-btns button.del:hover { color: var(--rose); background: rgba(244,63,94,.08); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .live-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.8s infinite; }
+        .course-tag { background: rgba(27,34,64,.06); color: var(--ink-2); }
+
+        /* ---------- Add / edit drawer ---------- */
+        .drawer {
+            position: fixed; top: 16px; right: 16px; bottom: 16px; width: 420px; max-width: calc(100% - 32px); z-index: 1050;
+            display: flex; flex-direction: column; background: rgba(255,255,255,.9);
+            transform: translateX(calc(100% + 32px)); transition: transform .35s cubic-bezier(.2,.9,.3,1);
+        }
+        .drawer.show { transform: none; }
+        .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); }
+        .drawer-head h3 { font-size: 18px; font-weight: 800; margin: 0; }
+        .drawer-head p { font-size: 12.5px; color: var(--muted); margin: 2px 0 0; }
+        .drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+        .drawer-foot { display: flex; gap: 8px; padding: 14px 22px 20px; border-top: 1px solid var(--line); }
+        .drawer-foot .btn-primary-grad { flex: 1; }
+        .field { margin-bottom: 16px; }
+        .pick-hint { display: flex; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: var(--ink-2); background: rgba(67,56,202,.06); border: 1px dashed rgba(67,56,202,.3); margin-bottom: 10px; }
+        .pick-hint i { color: var(--primary); }
+        .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .drawer-bg { position: fixed; inset: 0; z-index: 1045; display: none; }
+
+        @media (max-width: 1199.98px) { .zone-list { max-height: none; } }
+        @media (max-width: 575.98px) {
+            #zoneMap { height: 380px; }
+            .map-banner { font-size: 12px; white-space: normal; left: 10px; right: 10px; transform: none; max-width: none; }
+            .map-banner span { flex: 1; }
+            .map-tools { top: auto; bottom: 12px; }
+            /* bottom sheet on phones, short enough to keep part of the map visible for tapping */
+            .drawer { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-width: none; max-height: 52vh; transform: translateY(calc(100% + 16px)); }
+            .drawer.show { transform: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="#"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="#"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="#"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html" class="active"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="searchInput" placeholder="Search geofences, rooms, courses...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Geofences</div>
+                <h2>Geofences</h2>
+                <p>Virtual boundaries where students are allowed to mark attendance.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn-glass" id="testBtn"><i class="bi bi-crosshair"></i> Test a location</button>
+                <button class="btn-primary-grad" id="newBtn"><i class="bi bi-plus-lg"></i> New Geofence</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-bullseye"></i></div><div><div class="label">Total Zones</div><div class="value" id="sTotal">0</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-check2-circle"></i></div><div><div class="label">Active Zones</div><div class="value" id="sActive">0</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="stat-icon"><i class="bi bi-broadcast"></i></div><div><div class="label">Live Sessions Now</div><div class="value" id="sLive">0</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="stat-icon"><i class="bi bi-arrows-angle-expand"></i></div><div><div class="label">Average Radius</div><div class="value" id="sRadius">0 m</div></div></div></div>
+        </div>
+
+        <div class="row g-3 g-xl-4">
+            <!-- Map -->
+            <div class="col-xl-8">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3><i class="bi bi-map"></i> Campus Map</h3>
+                            <p>Click a zone to see its details. Inactive zones are shown dashed.</p>
+                        </div>
+                    </div>
+                    <div class="map-wrap" id="mapWrap">
+                        <div id="zoneMap"></div>
+                        <div class="map-tools">
+                            <button type="button" id="fitBtn" title="Show all zones" aria-label="Show all zones"><i class="bi bi-arrows-fullscreen"></i></button>
+                            <button type="button" id="myLocBtn" title="Go to my location" aria-label="Go to my location"><i class="bi bi-cursor"></i></button>
+                        </div>
+                        <div class="map-banner" id="banner"><i class="bi bi-hand-index"></i> <span id="bannerText"></span> <button type="button" id="bannerBtn">Cancel</button></div>
+                        <div class="test-card" id="testCard"></div>
+                    </div>
+                    <div class="map-legend" id="legend"></div>
+                </div>
+            </div>
+
+            <!-- Zone list -->
+            <div class="col-xl-4">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div>
+                            <h3><i class="bi bi-list-ul"></i> Zones</h3>
+                            <p id="listInfo">0 geofences</p>
+                        </div>
+                    </div>
+                    <div class="filters chips" id="filters">
+                        <label><input type="radio" name="zf" value="all" checked><span>All</span></label>
+                        <label><input type="radio" name="zf" value="classroom"><span><i class="bi bi-door-open"></i> Rooms</span></label>
+                        <label><input type="radio" name="zf" value="lab"><span><i class="bi bi-pc-display"></i> Labs</span></label>
+                        <label><input type="radio" name="zf" value="hall"><span><i class="bi bi-building"></i> Halls</span></label>
+                        <label><input type="radio" name="zf" value="campus"><span><i class="bi bi-geo-alt"></i> Campus</span></label>
+                        <label><input type="radio" name="zf" value="inactive"><span><i class="bi bi-pause-circle"></i> Inactive</span></label>
+                    </div>
+                    <div class="zone-list" id="zoneList"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================= ADD / EDIT DRAWER ================= -->
+    <aside class="drawer glass" id="drawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div>
+                <h3 id="drawerTitle">New Geofence</h3>
+                <p>Set where students can mark attendance.</p>
+            </div>
+            <button class="icon-btn" id="drawerClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form class="drawer-body" id="zoneForm" novalidate>
+            <div class="field">
+                <label class="f-label" for="zName">Zone name</label>
+                <input class="f-input" id="zName" maxlength="40" placeholder="e.g. Room B-204">
+            </div>
+            <div class="field">
+                <label class="f-label">Type</label>
+                <div class="chips" id="zTypes"></div>
+            </div>
+            <div class="field">
+                <label class="f-label" for="zBuilding">Building / description</label>
+                <input class="f-input" id="zBuilding" maxlength="60" placeholder="e.g. Block B, 2nd floor">
+            </div>
+
+            <div class="field">
+                <label class="f-label">Centre point</label>
+                <div class="pick-hint"><i class="bi bi-hand-index"></i><span>Click the map or drag the pin to set the centre.</span></div>
+                <div class="row g-2">
+                    <div class="col-6"><input class="f-input" id="zLat" type="number" step="0.000001" placeholder="Latitude"></div>
+                    <div class="col-6"><input class="f-input" id="zLng" type="number" step="0.000001" placeholder="Longitude"></div>
+                </div>
+                <button type="button" class="link-btn mt-1" id="useMyLoc"><i class="bi bi-crosshair"></i> Use my current location</button>
+            </div>
+
+            <div class="field">
+                <label class="f-label" for="zRadius">Radius</label>
+                <div class="range-wrap"><input type="range" id="zRadius" min="10" max="1000" step="5"><output id="zRadiusOut">50 m</output></div>
+                <div class="f-help">Indoor GPS is often 20–50 m off, so very small radiuses may reject real students.</div>
+            </div>
+
+            <div class="field">
+                <label class="f-label">Linked courses</label>
+                <div class="chips" id="zCourses"></div>
+                <div class="f-help">Sessions of these courses will use this geofence.</div>
+            </div>
+
+            <div class="field row-between">
+                <div><b style="font-size:14px">Active</b><div class="f-help mt-0">Inactive zones don't accept check-ins.</div></div>
+                <label class="switch-t"><input type="checkbox" id="zActive"><span></span></label>
+            </div>
+            <button type="submit" hidden></button>
+        </form>
+        <div class="drawer-foot">
+            <button type="button" class="btn-danger-soft" id="zDelete" style="display:none"><i class="bi bi-trash3"></i></button>
+            <button type="button" class="btn-glass" id="zCancel">Cancel</button>
+            <button type="button" class="btn-primary-grad" id="zSave"><i class="bi bi-check2-circle"></i> Save Geofence</button>
+        </div>
+    </aside>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * DEMO GEOFENCE STORE
+         * No backend yet: zones are kept in this browser's localStorage (key "ga_geofences").
+         * Later they will come from / be saved to the backend geofences API, and the backend will
+         * run the same distance check (haversine) when a student marks attendance.
+         */
+        const $ = id => document.getElementById(id);
+        const TYPES = {
+            classroom: { label: 'Classroom', icon: 'bi-door-open', color: '#4338ca' },
+            lab:       { label: 'Lab', icon: 'bi-pc-display', color: '#14b8a6' },
+            hall:      { label: 'Hall', icon: 'bi-building', color: '#0284c7' },
+            campus:    { label: 'Campus', icon: 'bi-geo-alt', color: '#f59e0b' },
+            other:     { label: 'Other', icon: 'bi-pin-map', color: '#8b5cf6' }
+        };
+        const COURSES = ['CS301', 'CS205', 'SE210', 'AI402', 'MT105', 'EE110'];
+        const LIVE = ['CS301', 'SE210', 'AI402', 'MT105'];   // sample: courses with a session running now
+
+        function settings() { try { return JSON.parse(localStorage.getItem('ga_settings')) || {}; } catch { return {}; } }
+        function sampleZones() {
+            const s = settings();
+            const c = [s.campusLat || 33.6844, s.campusLng || 73.0479];
+            return [
+                { id: 'z1', name: 'Main Campus', type: 'campus', building: 'Whole campus boundary', lat: c[0], lng: c[1], radius: 300, active: true, courses: [] },
+                { id: 'z2', name: 'Room B-204', type: 'classroom', building: 'Block B, 2nd floor', lat: 33.6849, lng: 73.0472, radius: 50, active: true, courses: ['CS301', 'CS205'] },
+                { id: 'z3', name: 'Lab 3', type: 'lab', building: 'IT Block, 1st floor', lat: 33.6838, lng: 73.0486, radius: 40, active: true, courses: ['SE210'] },
+                { id: 'z4', name: 'Hall A', type: 'hall', building: 'Main Academic Block', lat: 33.6852, lng: 73.0491, radius: 60, active: true, courses: ['AI402'] },
+                { id: 'z5', name: 'Room C-110', type: 'classroom', building: 'Block C, ground floor', lat: 33.6835, lng: 73.0466, radius: 45, active: true, courses: ['MT105'] },
+                { id: 'z6', name: 'Central Library', type: 'other', building: 'Library building', lat: 33.6858, lng: 73.0462, radius: 35, active: false, courses: [] }
+            ];
+        }
+        function load() { try { const z = JSON.parse(localStorage.getItem('ga_geofences')); if (Array.isArray(z)) return z; } catch {} return sampleZones(); }
+        function persist() { try { localStorage.setItem('ga_geofences', JSON.stringify(zones)); } catch {} }
+
+        let zones = load();
+        let filter = 'all', query = '', selectedId = null;
+
+        // Distance in metres between two points (haversine formula)
+        function distance(a, b) {
+            const R = 6371000, rad = x => x * Math.PI / 180;
+            const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+            const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+            return 2 * R * Math.asin(Math.sqrt(h));
+        }
+        const isLive = z => z.active && z.courses.some(c => LIVE.includes(c));
+
+        /* ================= MAP ================= */
+        const map = L.map('zoneMap', { scrollWheelZoom: false, zoomControl: true }).setView([33.6846, 73.0478], 17);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors', className: 'soft-tiles' }).addTo(map);
+        const layers = {};   // id → { circle, dot }
+
+        function drawZones() {
+            Object.values(layers).forEach(l => { map.removeLayer(l.circle); map.removeLayer(l.dot); });
+            zones.forEach(z => {
+                if (drawer.editing && drawer.editing.id === z.id) return;   // being edited → shown as preview instead
+                const t = TYPES[z.type] || TYPES.other;
+                const color = z.active ? t.color : '#94a3b8';
+                const circle = L.circle([z.lat, z.lng], {
+                    radius: z.radius, color, weight: z.id === selectedId ? 3 : 2, fillColor: color,
+                    fillOpacity: z.id === selectedId ? .25 : (z.type === 'campus' ? .05 : .14), dashArray: z.active ? null : '6 6'
+                }).addTo(map);
+                const dot = L.circleMarker([z.lat, z.lng], { radius: 4, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
+                circle.bindTooltip(`<b>${ui.esc(z.name)}</b> · ${z.radius} m`, { sticky: true });
+                const pick = e => { if (mode) return; L.DomEvent.stopPropagation(e); select(z.id, false); };
+                circle.on('click', pick); dot.on('click', pick);
+                layers[z.id] = { circle, dot };
+            });
+            // campus behind the rooms so rooms stay clickable
+            zones.filter(z => z.type === 'campus' && layers[z.id]).forEach(z => layers[z.id].circle.bringToBack());
+        }
+        function fitAll() {
+            const active = zones.filter(z => layers[z.id]);
+            if (!active.length) return;
+            const b = L.latLngBounds(active.map(z => layers[z.id].circle.getBounds()));
+            map.fitBounds(b, { padding: [30, 30] });
+        }
+        $('fitBtn').addEventListener('click', fitAll);
+        $('myLocBtn').addEventListener('click', () => getLocation(p => map.setView([p.lat, p.lng], 18)));
+
+        function getLocation(cb) {
+            if (!navigator.geolocation) return ui.toast('Location is not supported in this browser.', 'error');
+            ui.toast('Getting your location…', 'info');
+            navigator.geolocation.getCurrentPosition(
+                pos => cb({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
+                () => ui.toast('Could not get your location. Please allow location access.', 'error'),
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        $('legend').innerHTML = Object.values(TYPES).map(t => `<span><i style="background:${t.color}"></i>${t.label}</span>`).join('')
+            + '<span><i style="background:#94a3b8"></i>Inactive</span>';
+
+        /* ================= LIST ================= */
+        function render() {
+            const total = zones.length, active = zones.filter(z => z.active);
+            setVal('sTotal', total);
+            setVal('sActive', active.length);
+            setVal('sLive', zones.filter(isLive).length);
+            setVal('sRadius', (active.length ? Math.round(active.reduce((s, z) => s + z.radius, 0) / active.length) : 0) + ' m');
+
+            const q = query.toLowerCase();
+            const list = zones.filter(z => {
+                if (filter === 'inactive' ? z.active : (filter !== 'all' && z.type !== filter)) return false;
+                if (!q) return true;
+                return [z.name, z.building, TYPES[z.type]?.label, ...z.courses].join(' ').toLowerCase().includes(q);
+            });
+            $('listInfo').textContent = `${list.length} of ${total} geofence${total === 1 ? '' : 's'}`;
+
+            $('zoneList').innerHTML = list.length ? list.map(z => {
+                const t = TYPES[z.type] || TYPES.other;
+                return `
+                <div class="zone ${z.active ? '' : 'off'} ${z.id === selectedId ? 'sel' : ''}" data-id="${z.id}">
+                    <div class="z-ic" style="color:${t.color};background:${t.color}1f"><i class="bi ${t.icon}"></i></div>
+                    <div class="z-body">
+                        <div class="z-top"><b>${ui.esc(z.name)}</b>${isLive(z) ? '<span class="tag live-tag">LIVE</span>' : ''}</div>
+                        <small>${ui.esc(z.building || t.label)} · ${z.radius} m radius</small>
+                        <div class="z-tags">${z.courses.map(c => `<span class="tag course-tag">${c}</span>`).join('') || `<span class="tag course-tag">${t.label}</span>`}</div>
+                    </div>
+                    <div class="z-act">
+                        <label class="switch-t sm" title="${z.active ? 'Active' : 'Inactive'}"><input type="checkbox" data-toggle="${z.id}" ${z.active ? 'checked' : ''}><span></span></label>
+                        <div class="z-btns">
+                            <button type="button" data-edit="${z.id}" title="Edit" aria-label="Edit ${ui.esc(z.name)}"><i class="bi bi-pencil"></i></button>
+                            <button type="button" class="del" data-del="${z.id}" title="Delete" aria-label="Delete ${ui.esc(z.name)}"><i class="bi bi-trash3"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('') : `<div class="empty"><i class="bi bi-bullseye"></i><b>No geofences found</b>Try another filter or add a new zone.</div>`;
+        }
+        function setVal(id, v) {
+            const el = $(id);
+            if (el.textContent !== String(v)) { const first = el.textContent === '0' || el.textContent === '0 m'; el.textContent = v; if (!first) fx.bump(el); }
+        }
+
+        // Highlight a zone WITHOUT rebuilding the list, redrawing the map or scrolling the page
+        function select(id, fly = true) {
+            const z = zones.find(x => x.id === id);
+            if (!z) return;
+            selectedId = id;
+
+            // 1. list: just move the "sel" class
+            document.querySelectorAll('#zoneList .zone').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+
+            // 2. map: restyle the existing circles instead of removing/adding them
+            styleLayers();
+
+            // 3. scroll only inside the zone list (never the whole page)
+            const el = document.querySelector(`#zoneList .zone[data-id="${id}"]`);
+            const list = $('zoneList');
+            if (el && list.scrollHeight > list.clientHeight) {
+                const top = el.offsetTop - list.offsetTop, bottom = top + el.offsetHeight;
+                if (top < list.scrollTop) list.scrollTo({ top: top - 6, behavior: 'smooth' });
+                else if (bottom > list.scrollTop + list.clientHeight) list.scrollTo({ top: bottom - list.clientHeight + 6, behavior: 'smooth' });
+            }
+
+            // 4. map: one movement at a time — fly first, then open the popup without auto-panning
+            const showPopup = () => {
+                if (selectedId !== z.id) return;            // a newer click won
+                const t = TYPES[z.type] || TYPES.other;
+                L.popup({ offset: [0, -4], autoPan: false }).setLatLng([z.lat, z.lng]).setContent(`
+                    <div style="min-width:180px">
+                        <b style="font-size:14px">${ui.esc(z.name)}</b><br>
+                        <span style="color:#8a92b2;font-size:12px">${t.label} · ${z.radius} m · ${z.active ? 'Active' : 'Inactive'}</span><br>
+                        <span style="font-size:12px">${z.courses.length ? 'Courses: ' + z.courses.join(', ') : 'No linked courses'}</span><br>
+                        <a href="#" onclick="openDrawer('${z.id}');return false" style="font-size:12.5px;font-weight:700">Edit zone →</a>
+                    </div>`).openOn(map);
+            };
+            map.closePopup();
+            if (pendingPopup) map.off('moveend', pendingPopup);   // forget the popup of an earlier click
+            pendingPopup = null;
+            map.stop();
+            const zoom = z.type === 'campus' ? 16 : 18;
+            const there = map.getCenter().distanceTo([z.lat, z.lng]) < 5 && map.getZoom() === zoom;
+            if (fly && !there) {
+                pendingPopup = () => { pendingPopup = null; showPopup(); };
+                map.once('moveend', pendingPopup);
+                map.flyTo([z.lat, z.lng], zoom, { duration: .6 });
+            } else showPopup();
+        }
+        let pendingPopup = null;
+
+        // Selected zone = thicker border + stronger fill, others normal (no redraw)
+        function styleLayers() {
+            zones.forEach(z => {
+                const l = layers[z.id];
+                if (!l) return;
+                const sel = z.id === selectedId;
+                l.circle.setStyle({ weight: sel ? 3 : 2, fillOpacity: sel ? .25 : (z.type === 'campus' ? .05 : .14) });
+            });
+        }
+
+        $('zoneList').addEventListener('click', async e => {
+            const tog = e.target.closest('[data-toggle]');
+            if (tog) {
+                e.stopPropagation();
+                const z = zones.find(x => x.id === tog.dataset.toggle);
+                z.active = tog.checked; persist(); render(); drawZones();
+                ui.toast(`${z.name} is now ${z.active ? 'active' : 'inactive'}.`, z.active ? 'success' : 'info');
+                return;
+            }
+            if (e.target.closest('.switch-t')) return;
+            const ed = e.target.closest('[data-edit]');
+            if (ed) return openDrawer(ed.dataset.edit);
+            const del = e.target.closest('[data-del]');
+            if (del) return removeZone(del.dataset.del);
+            const card = e.target.closest('.zone');
+            if (card) select(card.dataset.id);
+        });
+
+        async function removeZone(id) {
+            const z = zones.find(x => x.id === id);
+            if (!z) return;
+            const ok = await ui.confirm('Delete geofence?', `"${z.name}" will be removed. Sessions linked to it won't be able to verify location.`, 'Delete');
+            if (!ok) return false;
+            zones = zones.filter(x => x.id !== id);
+            if (selectedId === id) selectedId = null;
+            map.closePopup(); persist(); render(); drawZones();
+            ui.toast('Geofence deleted.');
+            return true;
+        }
+
+        $('filters').addEventListener('change', e => { filter = e.target.value; render(); fx.enter('#zoneList .zone'); });
+        let st;
+        $('searchInput').addEventListener('input', e => { clearTimeout(st); st = setTimeout(() => { query = e.target.value.trim(); render(); }, 150); });
+
+        /* ================= MAP MODES: pick centre (drawer) / test a location ================= */
+        let mode = null;   // 'pick' | 'test' | null
+        function setMode(m) {
+            mode = m;
+            $('mapWrap').classList.toggle('picking', m === 'pick');
+            $('mapWrap').classList.toggle('testing', m === 'test');
+            $('testBtn').classList.toggle('on', m === 'test');
+            const banner = $('banner');
+            if (m === 'test') { $('bannerText').textContent = 'Click anywhere on the map to test a check-in'; $('bannerBtn').textContent = 'Done'; banner.classList.add('show'); }
+            else if (m === 'pick') { $('bannerText').textContent = 'Click the map to place the zone centre'; $('bannerBtn').textContent = 'Close form'; banner.classList.add('show'); }
+            else banner.classList.remove('show');
+            if (m !== 'test') clearTest();
+        }
+        $('bannerBtn').addEventListener('click', () => mode === 'pick' ? closeDrawer() : setMode(null));
+
+        map.on('click', e => {
+            if (mode === 'pick') setCentre(e.latlng.lat, e.latlng.lng);
+            else if (mode === 'test') runTest({ lat: e.latlng.lat, lng: e.latlng.lng });
+        });
+
+        // ---- Test a location: is this point inside any active geofence? ----
+        let testMarker = null;
+        function clearTest() { if (testMarker) { map.removeLayer(testMarker); testMarker = null; } $('testCard').classList.remove('show'); }
+        function runTest(p, acc) {
+            if (testMarker) map.removeLayer(testMarker);
+            testMarker = L.marker([p.lat, p.lng]).addTo(map);
+            const rows = zones.filter(z => z.active).map(z => {
+                const d = distance(p, z);
+                return { z, d, inside: d <= z.radius };
+            }).sort((a, b) => (b.inside - a.inside) || (a.d - b.d));
+            const inside = rows.filter(r => r.inside && r.z.type !== 'campus');
+            const onCampus = rows.some(r => r.inside && r.z.type === 'campus');
+            let icon, color, bg, title, sub;
+            if (inside.length) { icon = 'bi-check-lg'; color = '#047857'; bg = 'rgba(16,185,129,.14)'; title = 'Check-in allowed'; sub = `Inside ${inside.map(r => r.z.name).join(', ')}`; }
+            else if (onCampus) { icon = 'bi-exclamation-lg'; color = '#b45309'; bg = 'rgba(245,158,11,.16)'; title = 'On campus, not in a classroom'; sub = rows.find(r => !r.inside) ? `Nearest room: ${rows.find(r => !r.inside && r.z.type !== 'campus')?.z.name || '—'}` : ''; }
+            else { icon = 'bi-x-lg'; color = '#be123c'; bg = 'rgba(244,63,94,.12)'; title = 'Check-in rejected'; sub = 'Outside every active geofence'; }
+            $('testCard').innerHTML = `
+                <div class="verdict"><i class="bi ${icon}" style="color:${color};background:${bg}"></i><div><b>${title}</b><small>${ui.esc(sub)}</small></div></div>
+                ${acc ? `<div class="f-help mb-2">Your GPS accuracy: ±${Math.round(acc)} m</div>` : ''}
+                ${rows.slice(0, 6).map(r => `
+                    <div class="test-row"><span>${ui.esc(r.z.name)}</span>
+                    ${r.inside ? `<span class="in">Inside · ${Math.round(r.d)} m</span>` : `<span class="out">${Math.round(r.d - r.z.radius)} m outside</span>`}</div>`).join('')}
+                <button type="button" class="link-btn mt-1 px-0" id="testMine"><i class="bi bi-crosshair"></i> Test my current location</button>`;
+            $('testCard').classList.remove('show'); void $('testCard').offsetWidth; $('testCard').classList.add('show');
+            $('testMine').onclick = () => getLocation(pos => { map.setView([pos.lat, pos.lng], 18); runTest(pos, pos.acc); });
+        }
+        $('testBtn').addEventListener('click', () => {
+            if (mode === 'pick') closeDrawer();
+            setMode(mode === 'test' ? null : 'test');
+            if (mode === 'test') ui.toast('Test mode: click the map to simulate a student check-in.', 'info');
+        });
+
+        /* ================= DRAWER (add / edit) ================= */
+        const drawer = { el: $('drawer'), editing: null, marker: null, circle: null };
+        window.openDrawer = openDrawer;
+
+        $('zTypes').innerHTML = Object.entries(TYPES).map(([k, t]) => `<label><input type="radio" name="zType" value="${k}"><span><i class="bi ${t.icon}" style="color:${t.color}"></i>${t.label}</span></label>`).join('');
+        $('zCourses').innerHTML = COURSES.map(c => `<label><input type="checkbox" value="${c}"><span>${c}</span></label>`).join('');
+
+        function openDrawer(id) {
+            map.closePopup();
+            setMode(null);
+            const z = id ? zones.find(x => x.id === id) : null;
+            const c = map.getCenter();
+            drawer.editing = z ? { ...z } : { id: null, name: '', type: 'classroom', building: '', lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), radius: 50, active: true, courses: [] };
+            const d = drawer.editing;
+            $('drawerTitle').textContent = z ? 'Edit Geofence' : 'New Geofence';
+            $('zName').value = d.name; $('zBuilding').value = d.building;
+            $('zLat').value = d.lat; $('zLng').value = d.lng;
+            $('zRadius').value = d.radius; $('zRadiusOut').textContent = d.radius + ' m';
+            $('zActive').checked = d.active;
+            document.querySelectorAll('input[name="zType"]').forEach(r => r.checked = r.value === d.type);
+            document.querySelectorAll('#zCourses input').forEach(cb => cb.checked = d.courses.includes(cb.value));
+            $('zDelete').style.display = z ? '' : 'none';
+            document.querySelectorAll('#zoneForm .invalid').forEach(el => el.classList.remove('invalid'));
+
+            drawer.el.classList.add('show'); drawer.el.setAttribute('aria-hidden', 'false');
+            if (window.innerWidth < 576) {   // phones: bring the map just below the top bar, above the sheet
+                const top = $('mapWrap').getBoundingClientRect().top + window.scrollY - document.querySelector('.topbar').offsetHeight - 24;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+            setMode('pick');
+            drawZones();
+            showPreview();
+            map.flyTo([d.lat, d.lng], 18, { duration: .5 });
+            if (window.innerWidth >= 576) setTimeout(() => $('zName').focus(), 350);   // on phones the keyboard would cover the map
+        }
+        function closeDrawer() {
+            drawer.el.classList.remove('show'); drawer.el.setAttribute('aria-hidden', 'true');
+            if (drawer.marker) { map.removeLayer(drawer.marker); map.removeLayer(drawer.circle); drawer.marker = drawer.circle = null; }
+            drawer.editing = null;
+            setMode(null);
+            drawZones();
+            if (location.search.includes('new=1')) history.replaceState(null, '', location.pathname);
+        }
+        function showPreview() {
+            const d = drawer.editing;
+            const color = (TYPES[d.type] || TYPES.other).color;
+            if (!drawer.marker) {
+                drawer.marker = L.marker([d.lat, d.lng], { draggable: true, autoPan: true }).addTo(map);
+                drawer.circle = L.circle([d.lat, d.lng], { radius: d.radius, color, weight: 2, dashArray: '4 6', fillColor: color, fillOpacity: .18 }).addTo(map);
+                drawer.marker.on('drag', e => drawer.circle.setLatLng(e.latlng));
+                drawer.marker.on('dragend', e => { const p = e.target.getLatLng(); setCentre(p.lat, p.lng); });
+            }
+            drawer.marker.setLatLng([d.lat, d.lng]);
+            drawer.circle.setLatLng([d.lat, d.lng]).setRadius(d.radius).setStyle({ color, fillColor: color });
+        }
+        function setCentre(lat, lng) {
+            drawer.editing.lat = +lat.toFixed(6); drawer.editing.lng = +lng.toFixed(6);
+            $('zLat').value = drawer.editing.lat; $('zLng').value = drawer.editing.lng;
+            $('zLat').classList.remove('invalid'); $('zLng').classList.remove('invalid');
+            showPreview();
+        }
+
+        $('zRadius').addEventListener('input', e => { drawer.editing.radius = +e.target.value; $('zRadiusOut').textContent = e.target.value + ' m'; showPreview(); });
+        $('zRadius').addEventListener('change', () => fx.bump($('zRadiusOut')));
+        $('zTypes').addEventListener('change', e => {
+            drawer.editing.type = e.target.value;
+            if (e.target.value === 'campus' && drawer.editing.radius < 150) { drawer.editing.radius = 300; $('zRadius').value = 300; $('zRadiusOut').textContent = '300 m'; }
+            showPreview();
+        });
+        ['zLat', 'zLng'].forEach(id => $(id).addEventListener('input', () => {
+            const lat = parseFloat($('zLat').value), lng = parseFloat($('zLng').value);
+            if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { drawer.editing.lat = lat; drawer.editing.lng = lng; showPreview(); map.panTo([lat, lng]); }
+        }));
+        $('useMyLoc').addEventListener('click', () => getLocation(p => { setCentre(p.lat, p.lng); map.setView([p.lat, p.lng], 18); ui.toast(`Centre set to your location (±${Math.round(p.acc)} m).`); }));
+
+        function saveZone() {
+            const d = drawer.editing;
+            const name = $('zName').value.trim();
+            const lat = parseFloat($('zLat').value), lng = parseFloat($('zLng').value);
+            document.querySelectorAll('#zoneForm .invalid').forEach(el => el.classList.remove('invalid'));
+            if (!name) { $('zName').classList.add('invalid'); $('zName').focus(); return ui.toast('Please enter a zone name.', 'error'); }
+            if (zones.some(z => z.id !== d.id && z.name.toLowerCase() === name.toLowerCase())) { $('zName').classList.add('invalid'); return ui.toast('A geofence with this name already exists.', 'error'); }
+            if (!(Math.abs(lat) <= 90)) { $('zLat').classList.add('invalid'); return ui.toast('Latitude must be between -90 and 90.', 'error'); }
+            if (!(Math.abs(lng) <= 180)) { $('zLng').classList.add('invalid'); return ui.toast('Longitude must be between -180 and 180.', 'error'); }
+            const zone = {
+                id: d.id || 'z' + Date.now(), name, type: d.type, building: $('zBuilding').value.trim(),
+                lat: +lat.toFixed(6), lng: +lng.toFixed(6), radius: d.radius, active: $('zActive').checked,
+                courses: [...document.querySelectorAll('#zCourses input:checked')].map(c => c.value)
+            };
+            const isNew = !d.id;
+            if (isNew) zones.push(zone); else zones = zones.map(z => z.id === zone.id ? zone : z);
+            persist();
+            closeDrawer();
+            render();
+            select(zone.id);
+            fx.enter(`.zone[data-id="${zone.id}"]`);
+            ui.toast(isNew ? 'Geofence created.' : 'Geofence updated.');
+        }
+        $('zSave').addEventListener('click', saveZone);
+        $('zoneForm').addEventListener('submit', e => { e.preventDefault(); saveZone(); });
+        $('zCancel').addEventListener('click', closeDrawer);
+        $('drawerClose').addEventListener('click', closeDrawer);
+        $('zDelete').addEventListener('click', async () => { const id = drawer.editing.id; if (await removeZone(id)) closeDrawer(); });
+        $('newBtn').addEventListener('click', () => openDrawer(null));
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || document.querySelector('.modal-bg.show') || document.querySelector('.tb-pop.show')) return;
+            if (drawer.editing) closeDrawer(); else if (mode === 'test') setMode(null);
+        });
+
+        /* ================= INIT ================= */
+        render();
+        drawZones();
+        fitAll();
+        fx.enter('.page-head, .stat, .main > .row > div');
+        document.querySelectorAll('.stat .value').forEach(v => fx.countUp(v));
+        if (new URLSearchParams(location.search).get('new') === '1') setTimeout(() => openDrawer(null), 400);
+    </script>
+</body>
+</html>
