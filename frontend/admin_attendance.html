@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Records | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        .st-present { color: #047857; background: rgba(16,185,129,.12); }
+        .st-late { color: #b45309; background: rgba(245,158,11,.14); }
+        .st-absent { color: #be123c; background: rgba(244,63,94,.10); }
+        .st-excused { color: #0369a1; background: rgba(2,132,199,.12); }
+        .edited-tag { color: #6d28d9; background: rgba(139,92,246,.12); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .method { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+        .method i { color: var(--muted); }
+        .when b { color: var(--ink); font-size: 13px; display: block; }
+        .when small { color: var(--muted); font-size: 12px; }
+        .dist { font-size: 12.5px; }
+        .dist small { color: var(--muted); display: block; font-size: 11.5px; }
+        .filters-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+        .filters-row .f-select, .filters-row .f-input { width: auto; padding: 9px 12px; font-size: 13.5px; }
+        .filters-row .f-select { padding-right: 34px; min-width: 140px; }
+        .filters-row .date { width: 150px; }
+        .filters-row .grow { flex: 1 1 220px; max-width: 320px; position: relative; }
+        .filters-row .grow i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+        .filters-row .grow input { width: 100%; padding-left: 36px; }
+        .range-note { font-size: 12px; color: var(--muted); margin: -4px 0 12px; }
+        .range-note b { color: var(--ink-2); }
+
+        /* Sessions view */
+        .sess { border-radius: 16px; background: rgba(255,255,255,.6); border: 1.5px solid rgba(255,255,255,.95); margin-bottom: 10px; overflow: hidden; }
+        .sess-h { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; transition: background .2s; }
+        .sess-h:hover { background: rgba(255,255,255,.8); }
+        .sess-h .cc { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; font-weight: 800; font-size: 11px; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .sess-h b { font-size: 14px; display: block; }
+        .sess-h small { color: var(--muted); font-size: 12px; }
+        .sess-h .counts { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+        .sess-h .pct-cell { width: 140px; flex-shrink: 0; }
+        .sess-h .chev { color: var(--muted); transition: transform .25s; flex-shrink: 0; }
+        .sess.open .chev { transform: rotate(180deg); }
+        .sess-b { display: none; padding: 4px 14px 12px; border-top: 1px dashed var(--line); }
+        .sess.open .sess-b { display: block; animation: fxIn .3s ease; }
+        .sess-b .stu { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); cursor: pointer; }
+        .sess-b .stu:last-child { border-bottom: 0; }
+        .sess-b .stu:hover b { color: var(--primary); }
+        .sess-b .ini { width: 30px; height: 30px; border-radius: 9px; font-size: 10.5px; }
+        .sess-b b { font-size: 13px; color: var(--ink); }
+        .sess-b small { font-size: 12px; color: var(--muted); }
+        .sess-b .right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+        /* Detail drawer */
+        .r-hero { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 18px; background: linear-gradient(135deg, rgba(67,56,202,.08), rgba(20,184,166,.08)); margin-bottom: 14px; }
+        .r-hero .ini { width: 56px; height: 56px; border-radius: 18px; font-size: 19px; border: 3px solid #fff; }
+        .r-hero b { font-size: 17px; display: block; }
+        .r-hero small { color: var(--muted); font-size: 12.5px; }
+        #recMap { height: 200px; border-radius: 14px; border: 1px solid var(--glass-border); z-index: 1; margin: 12px 0 4px; }
+        .leaflet-container { font-family: inherit; background: #f4f6fc; }
+        .soft-tiles { filter: saturate(.45) brightness(1.06) contrast(.95); }
+        .verdict { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; font-size: 13px; margin-top: 10px; }
+        .verdict i { font-size: 18px; }
+        .audit { position: relative; padding-left: 22px; }
+        .audit::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--line); border-radius: 2px; }
+        .au { position: relative; padding: 6px 0 12px; font-size: 13px; }
+        .au::before { content: ""; position: absolute; left: -20px; top: 10px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid var(--dot, var(--primary)); }
+        .au b { color: var(--ink); }
+        .au small { display: block; color: var(--muted); font-size: 12px; }
+        .au .reason { margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: rgba(27,34,64,.04); font-size: 12.5px; color: var(--ink-2); }
+        .edit-box { padding: 14px; border-radius: 16px; background: rgba(255,255,255,.75); border: 1px solid var(--line); margin-top: 6px; }
+        .status-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+        .status-pick label { cursor: pointer; }
+        .status-pick input { display: none; }
+        .status-pick span { display: block; text-align: center; padding: 8px 4px; border-radius: 10px; font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--line); background: rgba(255,255,255,.8); color: var(--ink-2); transition: all .15s; }
+        .status-pick input:checked + span { border-color: currentColor; }
+        .status-pick .p input:checked + span { color: #047857; background: rgba(16,185,129,.1); }
+        .status-pick .l input:checked + span { color: #b45309; background: rgba(245,158,11,.12); }
+        .status-pick .a input:checked + span { color: #be123c; background: rgba(244,63,94,.08); }
+        .status-pick .e input:checked + span { color: #0369a1; background: rgba(2,132,199,.1); }
+        textarea.f-input { resize: vertical; min-height: 70px; }
+
+        @media (max-width: 767.98px) {
+            .filters-row .f-select, .filters-row .date { flex: 1 1 140px; }
+            .filters-row .grow { max-width: none; flex-basis: 100%; }
+            .sess-h { flex-wrap: wrap; }
+            .sess-h .counts { margin-left: 58px; }
+            .sess-h .pct-cell { width: auto; flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="admin_students.html"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="admin_teachers.html"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="admin_courses.html"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="admin_live_sessions.html"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="admin_attendance.html" class="active"><i class="bi bi-clipboard-check-fill"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search records by student, roll no. or course...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Only shown when printing -->
+        <div class="print-only" style="margin-bottom:12px">
+            <h1 style="font-size:22px;font-weight:800;margin:0">GeoAttend · Attendance Records</h1>
+            <p id="printMeta" style="font-size:12px;color:#555;margin:2px 0 0"></p>
+        </div>
+
+        <div class="page-head no-print">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Attendance Records</div>
+                <h2>Attendance Records</h2>
+                <p>Every check-in with its GPS proof. Review, correct and export attendance.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn-glass" id="printBtn"><i class="bi bi-printer"></i> Print</button>
+                <button class="btn-glass" id="exportBtn"><i class="bi bi-download"></i> Export CSV</button>
+                <button class="btn-primary-grad" id="manualBtn"><i class="bi bi-pencil-square"></i> Mark Attendance</button>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4" id="stats">
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-clipboard-data-fill"></i></div><div><div class="label">Records</div><div class="value" id="sTotal">0</div><div class="sub" id="sSessions"></div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-check2-circle"></i></div><div><div class="label">Attendance Rate</div><div class="value" id="sRate">0%</div><div class="sub">present + late</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="stat-icon"><i class="bi bi-alarm-fill"></i></div><div><div class="label">Late</div><div class="value" id="sLate">0</div></div></div></div>
+            <div class="col-6 col-md-6 col-xl"><div class="stat glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div><div><div class="label">Absent</div><div class="value" id="sAbsent">0</div></div></div></div>
+            <div class="col-12 col-md-6 col-xl"><div class="stat glass" style="--tint:#8b5cf6;--tint-bg:rgba(139,92,246,.12)"><div class="stat-icon"><i class="bi bi-pencil-fill"></i></div><div><div class="label">Corrected</div><div class="value" id="sEdited">0</div><div class="sub">edited by admin / teacher</div></div></div></div>
+        </div>
+
+        <div class="panel glass">
+            <div class="status-chips chips no-print" id="statusChips"></div>
+            <div class="filters-row no-print">
+                <div class="grow"><i class="bi bi-search"></i><input class="f-input" id="search" placeholder="Student, roll no. or course"></div>
+                <select class="f-select" id="fRange" aria-label="Date range">
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="7" selected>Last 7 days</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="month">This month</option>
+                    <option value="custom">Custom…</option>
+                </select>
+                <input class="f-input date" type="date" id="fFrom" style="display:none" aria-label="From date">
+                <input class="f-input date" type="date" id="fTo" style="display:none" aria-label="To date">
+                <select class="f-select" id="fCourse" aria-label="Course"></select>
+                <select class="f-select" id="fDept" aria-label="Department"></select>
+                <select class="f-select" id="fMethod" aria-label="Method">
+                    <option value="">All methods</option><option value="gps">GPS</option><option value="qr">GPS + QR</option><option value="manual">Manual</option>
+                </select>
+                <div class="seg ms-auto" id="viewSeg">
+                    <button class="active" data-v="records" title="All records"><i class="bi bi-list-ul"></i> Records</button>
+                    <button data-v="sessions" title="Grouped by class session"><i class="bi bi-collection"></i> Sessions</button>
+                </div>
+            </div>
+            <div class="range-note" id="rangeNote"></div>
+
+            <div class="bulk no-print" id="bulk">
+                <b id="bulkCount">0 selected</b>
+                <button class="btn-glass" data-bulk="present"><i class="bi bi-check2"></i> Present</button>
+                <button class="btn-glass" data-bulk="late"><i class="bi bi-alarm"></i> Late</button>
+                <button class="btn-glass" data-bulk="absent"><i class="bi bi-x"></i> Absent</button>
+                <button class="btn-glass" data-bulk="excused"><i class="bi bi-shield-check"></i> Excused</button>
+                <button class="btn-glass" data-bulk="export"><i class="bi bi-download"></i> Export</button>
+                <button class="link-btn clear" data-bulk="clear">Clear selection</button>
+            </div>
+
+            <div id="listArea"></div>
+            <div class="pager no-print" id="pager"></div>
+        </div>
+    </main>
+
+    <!-- ================= RECORD DRAWER ================= -->
+    <div class="drawer-shade" id="shade"></div>
+    <aside class="drawer glass wide" id="recDrawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3>Attendance Record</h3><p id="rSub"></p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="drawer-body" id="rBody"></div>
+    </aside>
+
+    <!-- ================= CHANGE STATUS MODAL (bulk) ================= -->
+    <div class="n-modal" id="bulkModal">
+        <div class="box glass">
+            <h4 id="bmTitle">Change status</h4>
+            <p id="bmText"></p>
+            <div class="field"><label class="f-label" for="bmReason">Reason (saved in the audit trail) *</label><textarea class="f-input" id="bmReason" maxlength="160" placeholder="e.g. Medical leave approved by HOD"></textarea></div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn-glass" id="bmCancel">Cancel</button>
+                <button class="btn-primary-grad" id="bmGo"><i class="bi bi-check2-circle"></i> Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MANUAL ENTRY MODAL ================= -->
+    <div class="n-modal" id="manualModal">
+        <div class="box glass">
+            <h4><i class="bi bi-pencil-square text-primary"></i> Mark Attendance Manually</h4>
+            <p>For a student who couldn't check in (phone problem, GPS issue…). It is saved as a manual record.</p>
+            <div class="field"><label class="f-label" for="mCourse">Course</label><select class="f-select" id="mCourse"></select></div>
+            <div class="row g-2">
+                <div class="col-6 field"><label class="f-label" for="mDate">Class date</label><select class="f-select" id="mDate"></select></div>
+                <div class="col-6 field"><label class="f-label" for="mStudent">Student</label><select class="f-select" id="mStudent"></select></div>
+            </div>
+            <label class="f-label">Status</label>
+            <div class="status-pick" id="mStatus">
+                <label class="p"><input type="radio" name="ms" value="present" checked><span>Present</span></label>
+                <label class="l"><input type="radio" name="ms" value="late"><span>Late</span></label>
+                <label class="a"><input type="radio" name="ms" value="absent"><span>Absent</span></label>
+                <label class="e"><input type="radio" name="ms" value="excused"><span>Excused</span></label>
+            </div>
+            <div class="field"><label class="f-label" for="mReason">Reason *</label><textarea class="f-input" id="mReason" maxlength="160" placeholder="e.g. Phone battery died — teacher confirmed presence"></textarea></div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn-glass" id="mCancel">Cancel</button>
+                <button class="btn-primary-grad" id="mGo"><i class="bi bi-check2-circle"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="assets/data.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * ATTENDANCE RECORDS
+         * No backend yet: past records are generated (same every time) from the shared courses, students and geofences
+         * in assets/data.js; today's records come from the Live Sessions page ("ga_sessions").
+         * Admin corrections and manual entries are saved in localStorage ("ga_att_edits", "ga_att_manual").
+         * Later all of this comes from the backend attendance API.
+         */
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const S = GA.settings();
+        const MIN_ATT = S.minAttendance || 75, LATE_AFTER = S.lateAfter ?? 10, DUR = S.sessionDuration || 15;
+        const DAY = 864e5, MIN = 6e4;
+        const DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const STATUS = { present: ['Present', 'st-present', '#10b981'], late: ['Late', 'st-late', '#f59e0b'], absent: ['Absent', 'st-absent', '#f43f5e'], excused: ['Excused', 'st-excused', '#0284c7'] };
+        const METHOD = { gps: ['GPS', 'bi-geo-alt'], qr: ['GPS + QR', 'bi-qr-code'], manual: ['Manual', 'bi-pencil'] };
+        const DEPT_COLORS = {
+            'Computer Science': ['#4338ca', '#6d5ce8'], 'Software Engineering': ['#0d9488', '#14b8a6'], 'Artificial Intelligence': ['#7c3aed', '#a855f7'],
+            'Information Technology': ['#0369a1', '#0ea5e9'], 'Electrical Engineering': ['#c2410c', '#f59e0b'], 'Mathematics': ['#be123c', '#f43f5e']
+        };
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+
+        const courses = GA.loadCourses(), COURSE = Object.fromEntries(courses.map(c => [c.code, c]));
+        const students = GA.loadStudents(), STU = Object.fromEntries(students.map(s => [s.id, s]));
+        const teachers = GA.loadTeachers();
+        const zones = GA.loadZones();
+        const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+        const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+        let edits = read('ga_att_edits', {});      // { recordId: [ {status, reason, at, by, prev} ... ] }
+        let manual = read('ga_att_manual', []);    // records added by hand
+
+        const key = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const parse = s => new Date(s + 'T00:00:00');
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const teacherOf = code => teachers.find(t => t.courses.includes(code));
+        const zoneOf = id => zones.find(z => z.id === id) || zones[0];
+        const initials = n => n.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const pcolor = id => PALETTE[GA.hash(id) % PALETTE.length];
+        const colors = code => DEPT_COLORS[COURSE[code]?.dept] || ['#4338ca', '#6d5ce8'];
+        const fmtDate = d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+        const fmtTime = t => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const sessionStart = (dateKey, code) => { const [h, m] = COURSE[code].time.split(':').map(Number); const d = parse(dateKey); d.setHours(h, m, 0, 0); return d.getTime(); };
+
+        /* ---------- Build records ---------- */
+        // past 35 days, generated from the timetable + enrolled students (same result every time)
+        function generated() {
+            const out = [];
+            for (let back = 1; back <= 35; back++) {
+                const d = new Date(today.getTime() - back * DAY), dk = key(d), wd = d.getDay();
+                courses.forEach(c => {
+                    if (!c.days.includes(wd)) return;
+                    const start = sessionStart(dk, c.code), z = zoneOf(c.zone);
+                    const dayMood = GA.rng(GA.hash(dk + c.code))() * .1 - .05;
+                    students.forEach(s => {
+                        if (s.status === 'pending' || !s.courses.includes(c.code)) return;
+                        const tot = s.att.present + s.att.late + s.att.absent;
+                        const rate = tot ? (s.att.present + s.att.late) / tot : .85, lateRate = tot ? s.att.late / tot : .06;
+                        const r = GA.rng(GA.hash(s.id + c.code + dk)), x = r();
+                        let status = x < rate + dayMood - lateRate ? 'present' : x < rate + dayMood ? 'late' : 'absent';
+                        if (status === 'absent' && r() < .12) status = 'excused';
+                        const m = r();
+                        const method = status === 'absent' || status === 'excused' ? null : m < .04 ? 'manual' : c.code === 'CS301' ? 'qr' : 'gps';
+                        const at = status === 'present' ? start + r() * LATE_AFTER * MIN : status === 'late' ? start + (LATE_AFTER + r() * (DUR - LATE_AFTER + 5)) * MIN : null;
+                        out.push({
+                            id: `${dk}|${c.code}|${s.id}`, date: dk, code: c.code, sid: s.id, status, at, method,
+                            dist: method && method !== 'manual' ? Math.round(3 + r() * z.radius * .85) : null,
+                            acc: method && method !== 'manual' ? Math.round(5 + r() * 22) : null,
+                            zone: c.zone, device: s.device?.model || null, source: 'history'
+                        });
+                    });
+                });
+            }
+            return out;
+        }
+        // today: check-ins from open sessions on the Live Sessions page
+        function fromLive() {
+            const out = [], dk = key(today);
+            (read('ga_sessions', []) || []).forEach(sess => {
+                if (!COURSE[sess.code]) return;
+                (sess.checkins || []).forEach(ci => {
+                    if (!STU[ci.sid]) return;
+                    out.push({ id: `${dk}|${sess.code}|${ci.sid}`, date: dk, code: sess.code, sid: ci.sid, status: ci.status, at: ci.at, method: ci.manual ? 'manual' : sess.qr ? 'qr' : 'gps',
+                        dist: ci.manual ? null : ci.dist, acc: ci.manual ? null : ci.acc, zone: sess.zone, device: STU[ci.sid].device?.model || null, source: 'live' });
+                });
+            });
+            return out;
+        }
+        const BASE = generated();
+        let ALL = [];
+        function rebuild() {
+            const map = new Map();
+            [...BASE, ...fromLive(), ...manual].forEach(r => map.set(r.id, { ...r }));
+            map.forEach(r => { const h = edits[r.id]; if (h && h.length) { r.original = r.status; r.status = h[h.length - 1].status; r.edited = true; } });
+            ALL = [...map.values()];
+        }
+        rebuild();
+
+        /* ---------- Filters ---------- */
+        $('fCourse').innerHTML = '<option value="">All courses</option>' + courses.map(c => `<option value="${c.code}">${c.code} · ${esc(c.name)}</option>`).join('');
+        $('fDept').innerHTML = '<option value="">All departments</option>' + GA.DEPARTMENTS.map(d => `<option>${d}</option>`).join('');
+        let status = 'all', query = '', view = 'records', sortKey = 'date', sortDir = -1, page = 1, perPage = 15;
+        const selected = new Set();
+
+        function range() {
+            const v = $('fRange').value;
+            let from = new Date(today), to = new Date(today);
+            if (v === 'yesterday') from = to = new Date(today.getTime() - DAY);
+            else if (v === '7') from = new Date(today.getTime() - 6 * DAY);
+            else if (v === '30') from = new Date(today.getTime() - 29 * DAY);
+            else if (v === 'month') from = new Date(today.getFullYear(), today.getMonth(), 1);
+            else if (v === 'custom') { from = $('fFrom').value ? parse($('fFrom').value) : new Date(today.getTime() - 6 * DAY); to = $('fTo').value ? parse($('fTo').value) : new Date(today); }
+            return { from, to };
+        }
+        function inScope() {
+            const { from, to } = range(), fk = key(from), tk = key(to);
+            const course = $('fCourse').value, dept = $('fDept').value, method = $('fMethod').value, q = query.toLowerCase();
+            return ALL.filter(r => {
+                if (r.date < fk || r.date > tk) return false;
+                if (course && r.code !== course) return false;
+                if (dept && COURSE[r.code].dept !== dept) return false;
+                if (method && r.method !== method) return false;
+                if (q) { const s = STU[r.sid]; if (![s.name, s.roll, r.code, COURSE[r.code].name].join(' ').toLowerCase().includes(q)) return false; }
+                return true;
+            });
+        }
+        function filtered() {
+            const base = inScope();
+            return base.filter(r => status === 'all' || (status === 'edited' ? r.edited : status === 'manual' ? r.method === 'manual' : r.status === status))
+                .sort((a, b) => {
+                    const v = { date: r => r.date + COURSE[r.code].time, student: r => STU[r.sid].name, course: r => r.code, status: r => r.status, dist: r => r.dist ?? 9999 }[sortKey];
+                    const x = v(a), y = v(b);
+                    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir || STU[a.sid].name.localeCompare(STU[b.sid].name);
+                });
+        }
+
+        /* ---------- Stats & chips ---------- */
+        function setStat(id, v) { const el = $(id); if (el.textContent !== String(v)) { const first = el.dataset.init !== '1'; el.textContent = v; el.dataset.init = '1'; if (!first) fx.bump(el); } }
+        function renderTop() {
+            const base = inScope();
+            const c = { all: base.length, present: 0, late: 0, absent: 0, excused: 0, edited: 0, manual: 0 };
+            base.forEach(r => { c[r.status]++; if (r.edited) c.edited++; if (r.method === 'manual') c.manual++; });
+            const sessions = new Set(base.map(r => r.date + r.code)).size;
+            setStat('sTotal', base.length.toLocaleString());
+            $('sSessions').textContent = `${sessions} class session${sessions === 1 ? '' : 's'}`;
+            const counted = base.length - c.excused;
+            setStat('sRate', (counted ? (c.present + c.late) / counted * 100 : 0).toFixed(1) + '%');
+            setStat('sLate', c.late); setStat('sAbsent', c.absent); setStat('sEdited', c.edited);
+            const chips = [['all', 'All', 'bi-list-ul'], ['present', 'Present', 'bi-check2-circle'], ['late', 'Late', 'bi-alarm'], ['absent', 'Absent', 'bi-x-circle'],
+                ['excused', 'Excused', 'bi-shield-check'], ['manual', 'Manual', 'bi-pencil'], ['edited', 'Corrected', 'bi-clock-history']];
+            $('statusChips').innerHTML = chips.map(([k, l, i]) => `<label><input type="radio" name="st" value="${k}" ${status === k ? 'checked' : ''}><span><i class="bi ${i}"></i> ${l} <span class="cnt">${c[k].toLocaleString()}</span></span></label>`).join('');
+            const { from, to } = range();
+            const txt = `${from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}${key(from) !== key(to) ? ' – ' + to.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}`;
+            $('rangeNote').innerHTML = `Showing <b>${txt}</b>${$('fCourse').value ? ' · ' + $('fCourse').value : ''}${$('fDept').value ? ' · ' + esc($('fDept').value) : ''}`;
+            $('printMeta').textContent = `${txt} · ${$('fCourse').value || 'All courses'} · ${$('fDept').value || 'All departments'} · printed ${new Date().toLocaleString()}`;
+        }
+
+        /* ---------- Render ---------- */
+        const stTag = r => `<span class="tag ${STATUS[r.status][1]}">${STATUS[r.status][0]}</span>${r.edited ? ' <span class="tag edited-tag" title="Corrected — see audit trail"><i class="bi bi-pencil"></i></span>' : ''}${r.source === 'live' ? ' <span class="tag live-tag">Live</span>' : ''}`;
+        const distTxt = r => r.dist == null ? '<span class="text-muted">—</span>' : `<div class="dist">${r.dist} m<small>±${r.acc} m GPS</small></div>`;
+        const methodTxt = r => r.method ? `<span class="method"><i class="bi ${METHOD[r.method][1]}"></i> ${METHOD[r.method][0]}</span>` : '<span class="text-muted">—</span>';
+
+        function render(animate) {
+            renderTop();
+            const rows = filtered();
+            if (view === 'records') renderRecords(rows, animate); else renderSessions(rows, animate);
+            renderBulk();
+        }
+        function renderRecords(rows, animate) {
+            const pages = Math.max(1, Math.ceil(rows.length / perPage));
+            if (page > pages) page = pages;
+            const shown = rows.slice((page - 1) * perPage, page * perPage);
+            const allChecked = shown.length && shown.every(r => selected.has(r.id));
+            const th = (k, l) => `<th data-sort="${k}" class="${sortKey === k ? 'sorted' : ''}">${l}<i class="bi ${sortKey === k ? (sortDir > 0 ? 'bi-sort-up' : 'bi-sort-down') : 'bi-arrow-down-up'}"></i></th>`;
+            $('listArea').innerHTML = rows.length ? `
+                <div class="table-responsive"><table class="table table-glass">
+                    <thead><tr>
+                        <th style="width:36px" class="no-print"><input type="checkbox" class="ck" id="ckAll" ${allChecked ? 'checked' : ''} aria-label="Select all on this page"></th>
+                        ${th('date', 'Date')}${th('student', 'Student')}${th('course', 'Course')}${th('status', 'Status')}<th>Check-in</th>${th('dist', 'Distance')}<th>Method</th>
+                    </tr></thead>
+                    <tbody>${shown.map(r => { const s = STU[r.sid], c = COURSE[r.code]; return `
+                        <tr data-row="${r.id}" class="${selected.has(r.id) ? 'checked' : ''}">
+                            <td class="no-print"><input type="checkbox" class="ck" data-ck="${r.id}" ${selected.has(r.id) ? 'checked' : ''} aria-label="Select record"></td>
+                            <td class="when"><b>${fmtDate(parse(r.date))}</b><small>${c.time}</small></td>
+                            <td><div class="person"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div><div><b>${esc(s.name)}</b><small>${esc(s.roll)}</small></div></div></td>
+                            <td><b style="color:var(--ink);font-size:13px">${r.code}</b><br><small class="text-muted">${esc(c.room)}</small></td>
+                            <td>${stTag(r)}</td>
+                            <td>${r.at ? fmtTime(r.at) : '<span class="text-muted">—</span>'}</td>
+                            <td>${distTxt(r)}</td>
+                            <td>${methodTxt(r)}</td>
+                        </tr>`; }).join('')}</tbody>
+                </table></div>` : `<div class="empty"><i class="bi bi-clipboard-x"></i><b>No records found</b>${$('fRange').value === 'today' ? 'No class sessions have run today yet.' : 'Try a wider date range or other filters.'}</div>`;
+            if (animate) fx.enter('#listArea tbody tr');
+            const start = rows.length ? (page - 1) * perPage + 1 : 0;
+            let btns = `<button data-pg="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>`;
+            for (let p = 1; p <= pages; p++) {
+                if (pages > 7 && p > 1 && p < pages && Math.abs(p - page) > 1) { if (!btns.endsWith('…</span>')) btns += '<span>…</span>'; continue; }
+                btns += `<button data-pg="${p}" class="${p === page ? 'cur' : ''}">${p}</button>`;
+            }
+            btns += `<button data-pg="${page + 1}" ${page === pages ? 'disabled' : ''} aria-label="Next page"><i class="bi bi-chevron-right"></i></button>`;
+            $('pager').innerHTML = `<span>Showing ${start}–${Math.min(page * perPage, rows.length)} of ${rows.length.toLocaleString()} records
+                · <select class="f-select d-inline-block" id="perPage" aria-label="Rows per page">${[15, 30, 60].map(n => `<option ${n === perPage ? 'selected' : ''}>${n}</option>`).join('')}</select> per page</span><div class="pg">${btns}</div>`;
+        }
+        let openSessions = new Set();
+        function renderSessions(rows, animate) {
+            const groups = new Map();
+            rows.forEach(r => { const k = r.date + '|' + r.code; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+            const list = [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]) || COURSE[b[1][0].code].time.localeCompare(COURSE[a[1][0].code].time));
+            $('pager').innerHTML = list.length ? `<span>${list.length} class session${list.length === 1 ? '' : 's'}</span>` : '';
+            $('listArea').innerHTML = list.length ? list.slice(0, 80).map(([k, rs]) => {
+                const [dk, code] = k.split('|'), c = COURSE[code], [c1, c2] = colors(code), t = teacherOf(code);
+                const n = { present: 0, late: 0, absent: 0, excused: 0 }; rs.forEach(r => n[r.status]++);
+                const counted = rs.length - n.excused, p = counted ? Math.round((n.present + n.late) / counted * 100) : 0;
+                const col = p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+                return `<div class="sess ${openSessions.has(k) ? 'open' : ''}" data-sess="${k}" style="--c1:${c1};--c2:${c2}">
+                    <div class="sess-h">
+                        <div class="cc">${code}</div>
+                        <div style="min-width:0"><b>${esc(c.name)}</b><small>${fmtDate(parse(dk))} · ${c.time} · ${esc(c.room)}${t ? ' · ' + esc(t.name) : ''}</small></div>
+                        <div class="counts"><span class="tag st-present">${n.present}</span><span class="tag st-late">${n.late}</span><span class="tag st-absent">${n.absent}</span>${n.excused ? `<span class="tag st-excused">${n.excused}</span>` : ''}</div>
+                        <div class="pct-cell"><div class="pct-bar"><span style="width:${p}%;background:${col}"></span></div><b>${p}%</b></div>
+                        <i class="bi bi-chevron-down chev"></i>
+                    </div>
+                    <div class="sess-b">${rs.sort((a, b) => STU[a.sid].name.localeCompare(STU[b.sid].name)).map(r => { const s = STU[r.sid]; return `
+                        <div class="stu" data-row="${r.id}"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                        <div style="min-width:0"><b>${esc(s.name)}</b><br><small>${esc(s.roll)}${r.at ? ' · ' + fmtTime(r.at) : ''}${r.dist != null ? ' · ' + r.dist + ' m' : ''}</small></div>
+                        <div class="right">${stTag(r)}</div></div>`; }).join('')}</div>
+                </div>`;
+            }).join('') + (list.length > 80 ? `<div class="f-help text-center">Showing the latest 80 sessions — narrow the date range to see more.</div>` : '')
+                : `<div class="empty"><i class="bi bi-collection"></i><b>No class sessions</b>Try a wider date range or other filters.</div>`;
+            if (animate) fx.enter('#listArea .sess');
+        }
+        function renderBulk() {
+            $('bulk').classList.toggle('show', selected.size > 0 && view === 'records');
+            $('bulkCount').textContent = `${selected.size} selected`;
+        }
+
+        /* ---------- Interactions ---------- */
+        $('listArea').addEventListener('click', e => {
+            const ck = e.target.closest('[data-ck]');
+            if (ck) { e.stopPropagation(); ck.checked ? selected.add(ck.dataset.ck) : selected.delete(ck.dataset.ck); ck.closest('tr').classList.toggle('checked', ck.checked); const all = $('ckAll'); if (all) all.checked = [...document.querySelectorAll('#listArea [data-ck]')].every(c => c.checked); return renderBulk(); }
+            if (e.target.id === 'ckAll') { document.querySelectorAll('#listArea [data-ck]').forEach(c => e.target.checked ? selected.add(c.dataset.ck) : selected.delete(c.dataset.ck)); return render(false); }
+            const th = e.target.closest('th[data-sort]');
+            if (th) { if (sortKey === th.dataset.sort) sortDir *= -1; else { sortKey = th.dataset.sort; sortDir = sortKey === 'date' ? -1 : 1; } return render(false); }
+            const sh = e.target.closest('.sess-h');
+            if (sh) { const box = sh.parentElement, k = box.dataset.sess; box.classList.toggle('open'); box.classList.contains('open') ? openSessions.add(k) : openSessions.delete(k); return; }
+            const row = e.target.closest('[data-row]');
+            if (row) openRecord(row.dataset.row);
+        });
+        $('pager').addEventListener('click', e => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; page = +b.dataset.pg; render(true); });
+        $('pager').addEventListener('change', e => { if (e.target.id === 'perPage') { perPage = +e.target.value; page = 1; render(true); } });
+        $('statusChips').addEventListener('change', e => { status = e.target.value; page = 1; render(true); });
+        ['fCourse', 'fDept', 'fMethod'].forEach(id => $(id).addEventListener('change', () => { page = 1; render(true); }));
+        $('fRange').addEventListener('change', () => {
+            const custom = $('fRange').value === 'custom';
+            $('fFrom').style.display = $('fTo').style.display = custom ? '' : 'none';
+            if (custom && !$('fFrom').value) { $('fFrom').value = key(new Date(today.getTime() - 6 * DAY)); $('fTo').value = key(today); }
+            page = 1; render(true);
+        });
+        ['fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', () => {
+            if ($('fFrom').value && $('fTo').value && $('fFrom').value > $('fTo').value) { $(id).classList.add('invalid'); return ui.toast('"From" must be before "To".', 'error'); }
+            $('fFrom').classList.remove('invalid'); $('fTo').classList.remove('invalid'); page = 1; render(true);
+        }));
+        let stimer;
+        const onSearch = v => { clearTimeout(stimer); stimer = setTimeout(() => { query = v.trim(); page = 1; render(true); }, 200); };
+        $('search').addEventListener('input', e => { $('topSearch').value = e.target.value; onSearch(e.target.value); });
+        $('topSearch').addEventListener('input', e => { $('search').value = e.target.value; onSearch(e.target.value); });
+        $('viewSeg').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b || b.dataset.v === view) return;
+            view = b.dataset.v; document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('active', x === b)); render(true);
+        });
+
+        /* ================= RECORD DETAILS & CORRECTION ================= */
+        let recId = null, recMap = null;
+        function openRecord(id) {
+            const r = ALL.find(x => x.id === id); if (!r) return;
+            recId = id;
+            const s = STU[r.sid], c = COURSE[r.code], z = zoneOf(r.zone), t = teacherOf(r.code), start = sessionStart(r.date, r.code);
+            const minsAfter = r.at ? Math.round((r.at - start) / MIN) : null;
+            const inside = r.dist != null && r.dist <= z.radius;
+            $('rSub').textContent = `${r.code} · ${fmtDate(parse(r.date))} at ${c.time}`;
+            const hist = edits[id] || [];
+            const firstLine = r.source === 'manual'
+                ? { t: `Added manually by Admin as ${STATUS[r.original || r.status][0]}`, d: new Date(r.addedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), dot: '#8b5cf6', reason: r.reason }
+                : r.method && r.method !== 'manual' ? { t: `Checked in by ${METHOD[r.method][0]}`, d: `${fmtTime(r.at)} · ${r.dist} m from centre · ±${r.acc} m`, dot: '#10b981' }
+                : r.method === 'manual' ? { t: 'Marked by teacher', d: `${fmtTime(r.at)} · ${t ? t.name : 'Teacher'}`, dot: '#8b5cf6' }
+                : { t: 'No check-in', d: `Session closed at ${fmtTime(start + DUR * MIN)} — recorded as ${STATUS[r.original || r.status][0].toLowerCase()}`, dot: '#f43f5e' };
+            $('rBody').innerHTML = `
+                <div class="r-hero">
+                    <div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                    <div style="min-width:0"><b>${esc(s.name)}</b><small>${esc(s.roll)} · ${esc(s.dept)}</small><br><span class="mt-1 d-inline-block">${stTag(r)}</span></div>
+                </div>
+                <div class="info-row"><span>Course</span><b>${r.code} · ${esc(c.name)}</b></div>
+                <div class="info-row"><span>Class session</span><b>${fmtDate(parse(r.date))} · ${c.time} · ${esc(c.room)}</b></div>
+                <div class="info-row"><span>Teacher</span><b>${t ? esc(t.name) : '—'}</b></div>
+                <div class="info-row"><span>Check-in time</span><b>${r.at ? `${fmtTime(r.at)} <small class="text-muted">(${minsAfter <= 0 ? 'on start' : minsAfter + ' min after start'})</small>` : '—'}</b></div>
+                <div class="info-row"><span>Method</span><b>${r.method ? METHOD[r.method][0] : '—'}</b></div>
+                <div class="info-row"><span>Device</span><b>${esc(r.device) || '—'}</b></div>
+                ${r.dist != null ? `
+                    <div id="recMap"></div>
+                    <div class="verdict" style="background:${inside ? 'rgba(16,185,129,.1)' : 'rgba(244,63,94,.08)'};color:${inside ? '#047857' : '#be123c'}">
+                        <i class="bi ${inside ? 'bi-shield-check' : 'bi-shield-exclamation'}"></i>
+                        <span><b>${inside ? 'Location verified' : 'Outside the geofence'}</b> — ${r.dist} m from the centre of ${esc(z.name)} (radius ${z.radius} m), GPS accuracy ±${r.acc} m.</span>
+                    </div>` : ''}
+                <h6 class="f-label mt-4 mb-2">Audit trail</h6>
+                <div class="audit">
+                    <div class="au" style="--dot:${firstLine.dot}"><b>${firstLine.t}</b><small>${esc(firstLine.d)}</small>${firstLine.reason ? `<div class="reason">“${esc(firstLine.reason)}”</div>` : ''}</div>
+                    ${hist.map(h => `<div class="au" style="--dot:#8b5cf6"><b>${esc(h.by)} changed ${STATUS[h.prev][0]} → ${STATUS[h.status][0]}</b><small>${new Date(h.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small><div class="reason">“${esc(h.reason)}”</div></div>`).join('')}
+                </div>
+                <h6 class="f-label mt-3 mb-2">Correct this record</h6>
+                <div class="edit-box">
+                    <div class="status-pick" id="rStatus">
+                        ${Object.entries(STATUS).map(([k, v]) => `<label class="${k[0]}"><input type="radio" name="rs" value="${k}" ${r.status === k ? 'checked' : ''}><span>${v[0]}</span></label>`).join('')}
+                    </div>
+                    <textarea class="f-input" id="rReason" maxlength="160" placeholder="Reason for the change (required) — e.g. Student showed a medical certificate"></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-2 gap-2 flex-wrap">
+                        <small class="text-muted"><i class="bi bi-info-circle"></i> Teachers can edit within ${S.editWindow || 24} h; admins any time.</small>
+                        <div class="d-flex gap-2">
+                            ${hist.length ? '<button class="btn-glass" id="rRevert" style="padding:8px 12px;font-size:13px"><i class="bi bi-arrow-counterclockwise"></i> Undo last change</button>' : ''}
+                            <button class="btn-primary-grad" id="rSave" style="padding:8px 14px;font-size:13px"><i class="bi bi-check2-circle"></i> Save change</button>
+                        </div>
+                    </div>
+                </div>`;
+            $('shade').classList.add('show'); $('recDrawer').classList.add('show'); $('recDrawer').setAttribute('aria-hidden', 'false');
+            if (r.dist != null) setTimeout(() => drawMap(r, z), 60);
+        }
+        function drawMap(r, z) {
+            if (recMap) { recMap.remove(); recMap = null; }
+            if (!document.getElementById('recMap')) return;
+            recMap = L.map('recMap', { scrollWheelZoom: false, zoomControl: false, attributionControl: false, dragging: true }).setView([z.lat, z.lng], z.radius > 150 ? 16 : 18);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'soft-tiles' }).addTo(recMap);
+            L.circle([z.lat, z.lng], { radius: z.radius, color: '#4338ca', weight: 2, fillColor: '#4338ca', fillOpacity: .12 }).addTo(recMap);
+            const ang = (GA.hash(r.id) % 360) * Math.PI / 180;
+            const p = [z.lat + r.dist * Math.cos(ang) / 111320, z.lng + r.dist * Math.sin(ang) / (111320 * Math.cos(z.lat * Math.PI / 180))];
+            L.circle(p, { radius: r.acc, color: '#10b981', weight: 1, fillColor: '#10b981', fillOpacity: .15, dashArray: '3 4' }).addTo(recMap);
+            L.circleMarker(p, { radius: 7, color: '#fff', weight: 2, fillColor: STATUS[r.status][2], fillOpacity: 1 }).bindTooltip('Check-in location').addTo(recMap);
+            setTimeout(() => recMap && recMap.invalidateSize(), 350);
+        }
+        function closeRecord() { recId = null; $('shade').classList.remove('show'); $('recDrawer').classList.remove('show'); $('recDrawer').setAttribute('aria-hidden', 'true'); }
+        $('shade').addEventListener('click', closeRecord);
+        document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeRecord));
+
+        function applyChange(ids, newStatus, reason) {
+            let changed = 0;
+            ids.forEach(id => {
+                const r = ALL.find(x => x.id === id); if (!r || r.status === newStatus) return;
+                (edits[id] = edits[id] || []).push({ status: newStatus, prev: r.status, reason, at: Date.now(), by: 'Admin' });
+                changed++;
+            });
+            write('ga_att_edits', edits); rebuild();
+            return changed;
+        }
+        $('recDrawer').addEventListener('click', e => {
+            if (e.target.closest('#rSave')) {
+                const r = ALL.find(x => x.id === recId);
+                const ns = document.querySelector('#rStatus input:checked').value, reason = $('rReason').value.trim();
+                if (ns === r.status) return ui.toast(`It is already ${STATUS[ns][0].toLowerCase()}.`, 'info');
+                if (reason.length < 5) { $('rReason').classList.add('invalid'); fx.shake($('rReason')); return ui.toast('Please write a short reason for the change.', 'error'); }
+                applyChange([recId], ns, reason); render(false); openRecord(recId);
+                return ui.toast(`Changed to ${STATUS[ns][0]} — saved in the audit trail.`);
+            }
+            if (e.target.closest('#rRevert')) {
+                edits[recId].pop(); if (!edits[recId].length) delete edits[recId];
+                write('ga_att_edits', edits); rebuild(); render(false); openRecord(recId);
+                return ui.toast('Last change undone.', 'info');
+            }
+        });
+        $('recDrawer').addEventListener('input', e => { if (e.target.id === 'rReason') e.target.classList.remove('invalid'); });
+
+        /* ================= BULK ================= */
+        let bulkStatus = null;
+        $('bulk').addEventListener('click', e => {
+            const b = e.target.closest('[data-bulk]'); if (!b) return;
+            const k = b.dataset.bulk;
+            if (k === 'clear') { selected.clear(); return render(false); }
+            if (k === 'export') return exportCsv(ALL.filter(r => selected.has(r.id)), 'selected');
+            bulkStatus = k;
+            $('bmTitle').textContent = `Mark ${selected.size} record${selected.size === 1 ? '' : 's'} as ${STATUS[k][0]}`;
+            $('bmText').textContent = 'Every change is kept in each record\'s audit trail with your reason.';
+            $('bmReason').value = ''; $('bmReason').classList.remove('invalid');
+            $('bulkModal').classList.add('show'); setTimeout(() => $('bmReason').focus(), 50);
+        });
+        $('bmCancel').addEventListener('click', () => $('bulkModal').classList.remove('show'));
+        $('bmGo').addEventListener('click', () => {
+            const reason = $('bmReason').value.trim();
+            if (reason.length < 5) { $('bmReason').classList.add('invalid'); fx.shake($('bmReason')); return ui.toast('Please write a short reason.', 'error'); }
+            const n = applyChange([...selected], bulkStatus, reason);
+            $('bulkModal').classList.remove('show'); selected.clear(); render(false);
+            ui.toast(n ? `${n} record${n === 1 ? '' : 's'} changed to ${STATUS[bulkStatus][0]}.` : 'Nothing changed — they already had that status.', n ? 'success' : 'info');
+        });
+
+        /* ================= MANUAL ENTRY ================= */
+        function classDates(code) {
+            const c = COURSE[code], out = [];
+            for (let back = 0; back <= 35; back++) {
+                const d = new Date(today.getTime() - back * DAY);
+                if (!c.days.includes(d.getDay())) continue;
+                if (back === 0 && sessionStart(key(d), code) > Date.now()) continue;   // today's class hasn't started
+                out.push(key(d));
+            }
+            return out;
+        }
+        function fillManual() {
+            const code = $('mCourse').value, dates = classDates(code);
+            $('mDate').innerHTML = dates.length ? dates.map(d => `<option value="${d}">${fmtDate(parse(d))}</option>`).join('') : '<option value="">No past classes</option>';
+            const enr = students.filter(s => s.courses.includes(code) && s.status !== 'pending').sort((a, b) => a.name.localeCompare(b.name));
+            $('mStudent').innerHTML = enr.map(s => `<option value="${s.id}">${esc(s.name)} · ${esc(s.roll)}</option>`).join('') || '<option value="">No students</option>';
+        }
+        $('manualBtn').addEventListener('click', () => {
+            $('mCourse').innerHTML = courses.filter(c => c.status === 'active').map(c => `<option value="${c.code}">${c.code} · ${esc(c.name)}</option>`).join('');
+            if ($('fCourse').value) $('mCourse').value = $('fCourse').value;
+            fillManual(); $('mReason').value = ''; $('mReason').classList.remove('invalid');
+            $('manualModal').classList.add('show');
+        });
+        $('mCourse').addEventListener('change', fillManual);
+        $('mCancel').addEventListener('click', () => $('manualModal').classList.remove('show'));
+        $('mGo').addEventListener('click', () => {
+            const code = $('mCourse').value, dk = $('mDate').value, sid = $('mStudent').value;
+            const st = document.querySelector('#mStatus input:checked').value, reason = $('mReason').value.trim();
+            if (!dk || !sid) return ui.toast('Choose a class date and a student.', 'error');
+            if (reason.length < 5) { $('mReason').classList.add('invalid'); fx.shake($('mReason')); return ui.toast('Please write a short reason.', 'error'); }
+            const id = `${dk}|${code}|${sid}`;
+            const existing = ALL.find(r => r.id === id);
+            if (existing) {
+                // a record already exists → this becomes a correction with an audit entry
+                if (existing.status === st) { $('manualModal').classList.remove('show'); return ui.toast(`${STU[sid].name} is already ${STATUS[st][0].toLowerCase()} for that class.`, 'info'); }
+                applyChange([id], st, reason);
+            } else {
+                manual.push({ id, date: dk, code, sid, status: st, at: ['present', 'late'].includes(st) ? sessionStart(dk, code) + (st === 'late' ? LATE_AFTER + 2 : 2) * MIN : null,
+                    method: 'manual', dist: null, acc: null, zone: COURSE[code].zone, device: null, source: 'manual', reason, addedAt: Date.now() });
+                write('ga_att_manual', manual);
+                rebuild();
+            }
+            $('manualModal').classList.remove('show');
+            render(false);
+            ui.toast(`${STU[sid].name} marked ${STATUS[st][0].toLowerCase()} for ${code} on ${fmtDate(parse(dk))}.`);
+        });
+        ['bulkModal', 'manualModal'].forEach(id => $(id).addEventListener('click', e => { if (e.target.id === id) $(id).classList.remove('show'); }));
+
+        /* ================= EXPORT / PRINT ================= */
+        function exportCsv(list, label) {
+            if (!list.length) return ui.toast('No records to export.', 'error');
+            const head = ['Date', 'Class time', 'Course', 'Student', 'Roll No', 'Status', 'Check-in', 'Distance (m)', 'GPS accuracy (m)', 'Method', 'Corrected', 'Last reason'];
+            const rows = list.map(r => { const s = STU[r.sid], h = edits[r.id]; return [r.date, COURSE[r.code].time, r.code, s.name, s.roll, STATUS[r.status][0], r.at ? fmtTime(r.at) : '', r.dist ?? '', r.acc ?? '', r.method ? METHOD[r.method][0] : '', r.edited ? 'Yes' : '', h && h.length ? h[h.length - 1].reason : '']; });
+            const csv = [head, ...rows].map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+            a.download = `geoattend-attendance-${label}-${key(new Date())}.csv`; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            ui.toast(`${list.length.toLocaleString()} records exported.`);
+        }
+        $('exportBtn').addEventListener('click', () => { exportCsv(filtered(), 'list'); fx.success($('exportBtn'), 'Exported'); });
+        $('printBtn').addEventListener('click', () => {
+            if (view !== 'records') return ui.toast('Switch to the Records view to print.', 'info');
+            const keep = perPage; perPage = 100000; render(false);
+            setTimeout(() => { window.print(); perPage = keep; render(false); }, 100);
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || document.querySelector('.modal-bg.show') || document.querySelector('.tb-pop.show')) return;
+            if (document.querySelector('.n-modal.show')) return document.querySelectorAll('.n-modal').forEach(m => m.classList.remove('show'));
+            closeRecord();
+        });
+
+        /* ================= INIT ================= */
+        const params = new URLSearchParams(location.search);
+        if (params.get('course') && COURSE[params.get('course')]) $('fCourse').value = params.get('course');
+        if (params.get('student')) { const s = STU[params.get('student')]; if (s) { query = s.roll; $('search').value = $('topSearch').value = s.roll; $('fRange').value = '30'; } }
+        render(false);
+        fx.enter('.page-head, #stats > div, .main > .panel');
+        document.querySelectorAll('.stat .value').forEach(v => fx.countUp(v));
+    </script>
+</body>
+</html>
