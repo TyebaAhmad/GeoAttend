@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+
+    <style>
+        /* ---------- Filter bar ---------- */
+        .filter-bar { padding: 16px 18px; margin-bottom: 22px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+        .filter-bar .fb { display: flex; flex-direction: column; min-width: 160px; flex: 1; }
+        .filter-bar .fb.date { flex: 0 0 150px; min-width: 140px; }
+        .filter-bar .fb .f-label { font-size: 12px; margin-bottom: 5px; }
+        .filter-bar .f-input, .filter-bar .f-select { padding: 9px 12px; font-size: 13.5px; }
+        .filter-bar .f-select { padding-right: 34px; }
+        .filter-bar .actions { display: flex; gap: 8px; }
+        .filter-bar .btn-glass { padding: 9px 14px; font-size: 13.5px; box-shadow: none; border-color: var(--line); }
+        .range-note { width: 100%; font-size: 12px; color: var(--muted); margin-top: -4px; }
+        .range-note b { color: var(--ink-2); }
+
+        /* ---------- KPIs ---------- */
+        .kpi { padding: 16px 18px; height: 100%; position: relative; overflow: hidden; transition: transform .25s ease; }
+        .kpi:hover { transform: translateY(-3px); }
+        .kpi .k-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .kpi .k-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-size: 17px; color: var(--tint); background: var(--tint-bg); }
+        .kpi .label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+        .kpi .value { font-size: 26px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; margin-top: 2px; }
+        .kpi .sub { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+        .kpi:hover .k-ic { animation: fxWiggle .5s ease; }
+
+        .chart-box { position: relative; height: 290px; }
+        .chart-box.sm { height: 250px; }
+        .donut-wrap { position: relative; height: 200px; }
+        .donut-center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+        .donut-center b { font-size: 26px; font-weight: 800; display: block; line-height: 1; }
+        .donut-center small { color: var(--muted); font-size: 12px; }
+        .legend-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+        .legend-row:last-child { border-bottom: 0; }
+        .legend-row .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 8px; }
+        .legend-row small { color: var(--muted); margin-left: 6px; }
+
+        /* ---------- Table ---------- */
+        .tbl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .tbl-search { position: relative; flex: 1; min-width: 200px; max-width: 320px; }
+        .tbl-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+        .tbl-search input { padding-left: 36px; }
+        .low-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; user-select: none; }
+        .table-glass { margin: 0; --bs-table-bg: transparent; }
+        .table-glass thead th {
+            font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+            border-bottom: 1px solid var(--line); padding: 10px 12px; white-space: nowrap; cursor: pointer; user-select: none;
+        }
+        .table-glass thead th:hover { color: var(--primary); }
+        .table-glass thead th i { font-size: 10px; margin-left: 3px; opacity: .4; }
+        .table-glass thead th.sorted { color: var(--primary); }
+        .table-glass thead th.sorted i { opacity: 1; }
+        .table-glass td { padding: 11px 12px; vertical-align: middle; font-size: 13.5px; color: var(--ink-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+        .table-glass tbody tr { transition: background .2s, transform .2s; }
+        .table-glass tbody tr:hover { background: rgba(255,255,255,.6); }
+        .table-glass tbody tr:last-child td { border-bottom: 0; }
+        .table-glass td.num { font-variant-numeric: tabular-nums; }
+        .person { display: flex; align-items: center; gap: 10px; }
+        .person .ini { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+        .person b { color: var(--ink); font-size: 13.5px; display: block; }
+        .person small { color: var(--muted); font-size: 12px; }
+        .pct-cell { display: flex; align-items: center; gap: 10px; min-width: 150px; }
+        .pct-bar { flex: 1; height: 6px; border-radius: 6px; background: rgba(27,34,64,.07); overflow: hidden; }
+        .pct-bar span { display: block; height: 100%; border-radius: 6px; transform-origin: left; animation: fxGrow .8s cubic-bezier(.2,.8,.3,1) backwards; }
+        .pct-cell b { width: 46px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+        .st-good { color: #047857; background: rgba(16,185,129,.12); }
+        .st-warn { color: #b45309; background: rgba(245,158,11,.14); }
+        .st-low { color: #be123c; background: rgba(244,63,94,.12); }
+        .pager { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+        .pager .pg { display: flex; gap: 4px; }
+        .pager button {
+            min-width: 34px; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.7);
+            font: inherit; font-size: 13px; font-weight: 700; color: var(--ink-2); cursor: pointer; transition: all .15s;
+        }
+        .pager button:hover:not(:disabled) { color: var(--primary); border-color: rgba(67,56,202,.35); }
+        .pager button.cur { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .pager button:disabled { opacity: .4; cursor: default; }
+
+        .print-head { margin-bottom: 16px; }
+        .print-head h1 { font-size: 22px; font-weight: 800; margin: 0; }
+        .print-head p { font-size: 12px; color: #555; margin: 2px 0 0; }
+        @media print {
+            .chart-box, .chart-box.sm { height: 230px; }
+            .table-glass td, .table-glass th { padding: 6px 8px !important; font-size: 11px !important; }
+            .pct-bar span { animation: none; }
+            .row > [class*="col-"] { break-inside: avoid; }
+        }
+        @media (max-width: 575.98px) {
+            .filter-bar .fb, .filter-bar .fb.date { flex: 1 1 100%; }
+            .filter-bar .actions { width: 100%; }
+            .filter-bar .actions .btn-glass { flex: 1; }
+            .kpi .value { font-size: 21px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="#"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="#"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="#"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html" class="active"><i class="bi bi-bar-chart-line-fill"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search students or courses in this report...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Only shown when printing -->
+        <div class="print-only print-head">
+            <h1 id="printTitle">GeoAttend · Attendance Report</h1>
+            <p id="printMeta"></p>
+        </div>
+
+        <div class="page-head no-print">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Reports</div>
+                <h2>Reports &amp; Analytics</h2>
+                <p>Daily, weekly and monthly attendance across courses, departments and students.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="admin_settings.html#data" class="btn-glass"><i class="bi bi-calendar-check"></i> Scheduled Reports</a>
+                <button class="btn-glass" id="printBtn"><i class="bi bi-printer"></i> Print / PDF</button>
+                <button class="btn-primary-grad" id="csvBtn"><i class="bi bi-download"></i> Export CSV</button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar glass no-print">
+            <div class="fb">
+                <label class="f-label" for="fRange">Date range</label>
+                <select class="f-select" id="fRange">
+                    <option value="today">Today</option>
+                    <option value="week">This week</option>
+                    <option value="month" selected>This month</option>
+                    <option value="last30">Last 30 days</option>
+                    <option value="lastMonth">Last month</option>
+                    <option value="semester">This semester</option>
+                    <option value="custom">Custom range…</option>
+                </select>
+            </div>
+            <div class="fb date" id="fromWrap" style="display:none"><label class="f-label" for="fFrom">From</label><input class="f-input" type="date" id="fFrom"></div>
+            <div class="fb date" id="toWrap" style="display:none"><label class="f-label" for="fTo">To</label><input class="f-input" type="date" id="fTo"></div>
+            <div class="fb">
+                <label class="f-label" for="fDept">Department</label>
+                <select class="f-select" id="fDept"></select>
+            </div>
+            <div class="fb">
+                <label class="f-label" for="fCourse">Course</label>
+                <select class="f-select" id="fCourse"></select>
+            </div>
+            <div class="actions">
+                <button class="btn-glass" id="resetBtn"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+            </div>
+            <div class="range-note" id="rangeNote"></div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="row g-3 mb-4" id="kpis">
+            <div class="col-6 col-md-4 col-xl"><div class="kpi glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="k-top"><span class="label">Avg. Attendance</span><span class="k-ic"><i class="bi bi-graph-up-arrow"></i></span></div><div class="value" id="kAvg">0%</div><div class="sub" id="kAvgSub"></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="kpi glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="k-top"><span class="label">Sessions Held</span><span class="k-ic"><i class="bi bi-broadcast"></i></span></div><div class="value" id="kSessions">0</div><div class="sub" id="kSessionsSub"></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="kpi glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="k-top"><span class="label">GPS Check-ins</span><span class="k-ic"><i class="bi bi-geo-alt"></i></span></div><div class="value" id="kCheckins">0</div><div class="sub" id="kCheckinsSub"></div></div></div>
+            <div class="col-6 col-md-6 col-xl"><div class="kpi glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="k-top"><span class="label">Late Arrivals</span><span class="k-ic"><i class="bi bi-alarm"></i></span></div><div class="value" id="kLate">0%</div><div class="sub" id="kLateSub"></div></div></div>
+            <div class="col-12 col-md-6 col-xl"><div class="kpi glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="k-top"><span class="label">Below Requirement</span><span class="k-ic"><i class="bi bi-exclamation-triangle"></i></span></div><div class="value" id="kLow">0</div><div class="sub" id="kLowSub"></div></div></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row g-3 g-xl-4 mb-4">
+            <div class="col-xl-8">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div><h3><i class="bi bi-activity"></i> Attendance Trend</h3><p id="trendSub">Daily present, late and absent rates</p></div>
+                        <div class="seg no-print" id="trendSeg">
+                            <button class="active" data-g="auto">Auto</button>
+                            <button data-g="day">Daily</button>
+                            <button data-g="week">Weekly</button>
+                        </div>
+                    </div>
+                    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="panel glass">
+                    <div class="panel-head"><div><h3><i class="bi bi-pie-chart"></i> Status Breakdown</h3><p id="donutSub">All check-ins in range</p></div></div>
+                    <div class="donut-wrap"><canvas id="donutChart"></canvas><div class="donut-center"><div><b id="donutPct">0%</b><small>Attendance</small></div></div></div>
+                    <div class="mt-3" id="donutLegend"></div>
+                </div>
+            </div>
+            <div class="col-xl-7">
+                <div class="panel glass">
+                    <div class="panel-head"><div><h3><i class="bi bi-journal-bookmark"></i> Attendance by Course</h3><p>Green ≥ 85%, amber ≥ requirement, red below requirement</p></div></div>
+                    <div class="chart-box sm"><canvas id="courseChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="panel glass">
+                    <div class="panel-head"><div><h3><i class="bi bi-calendar-week"></i> Attendance by Weekday</h3><p>Which days students miss most</p></div></div>
+                    <div class="chart-box sm"><canvas id="weekdayChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed table -->
+        <div class="panel glass">
+            <div class="panel-head">
+                <div><h3><i class="bi bi-table"></i> Detailed Report</h3><p id="tableSub"></p></div>
+                <div class="seg no-print" id="tableSeg">
+                    <button class="active" data-t="student"><i class="bi bi-people"></i> By Student</button>
+                    <button data-t="course"><i class="bi bi-journal-bookmark"></i> By Course</button>
+                </div>
+            </div>
+            <div class="tbl-tools no-print">
+                <div class="tbl-search"><i class="bi bi-search"></i><input class="f-input" id="tblSearch" placeholder="Search by name, roll no. or course"></div>
+                <label class="low-toggle"><span class="switch-t sm"><input type="checkbox" id="lowOnly"><span></span></span> Only below requirement</label>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-glass">
+                    <thead id="thead"></thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
+            <div class="pager no-print" id="pager"></div>
+        </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * DEMO REPORT DATA
+         * There is no backend yet, so attendance records are generated here with a fixed random seed
+         * (the same filters always give the same numbers). Later this page will call the backend
+         * reports API with the same filters and draw the real records.
+         */
+        const $ = id => document.getElementById(id);
+        const DAY = 864e5;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const S = (() => { try { return JSON.parse(localStorage.getItem('ga_settings')) || {}; } catch { return {}; } })();
+        const MIN_ATT = S.minAttendance || 75;
+        const LATE_COUNTS = S.lateCountsPresent !== false;
+
+        /* ---------- Seeded random (same input → same numbers) ---------- */
+        function hash(str) { let h = 2166136261; for (const ch of str) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+        function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+        /* ---------- Sample university data ---------- */
+        const DEPTS = ['Computer Science', 'Software Engineering', 'Artificial Intelligence', 'Electrical Engineering'];
+        const SHARED = 'MT105';   // taken by students of every department
+        const DEPT_CODE = { 'Computer Science': 'BCS', 'Software Engineering': 'BSE', 'Artificial Intelligence': 'BAI', 'Electrical Engineering': 'BEE', 'Mathematics': 'BMT' };
+        const COURSES = [
+            { code: 'CS301', name: 'Database Systems', dept: 'Computer Science', teacher: 'Dr. Sana Malik', days: [1, 3] },
+            { code: 'CS205', name: 'Data Structures', dept: 'Computer Science', teacher: 'Dr. Kamran Shah', days: [2, 4] },
+            { code: 'SE210', name: 'Software Engineering', dept: 'Software Engineering', teacher: 'Prof. Imran Ali', days: [1, 4] },
+            { code: 'SE315', name: 'Web Engineering', dept: 'Software Engineering', teacher: 'Ms. Hira Qureshi', days: [2, 5] },
+            { code: 'AI402', name: 'Artificial Intelligence', dept: 'Artificial Intelligence', teacher: 'Dr. Ayesha Khan', days: [3, 5] },
+            { code: 'AI310', name: 'Machine Learning', dept: 'Artificial Intelligence', teacher: 'Dr. Ayesha Khan', days: [1, 2] },
+            { code: 'EE110', name: 'Circuit Analysis', dept: 'Electrical Engineering', teacher: 'Engr. Usman Ghani', days: [2, 4] },
+            { code: 'MT105', name: 'Linear Algebra', dept: 'Mathematics', teacher: 'Mr. Bilal Ahmed', days: [3, 5] }
+        ];
+        const FIRST = ['Hamza', 'Fatima', 'Usman', 'Zainab', 'Ali', 'Maryam', 'Ahmed', 'Ayesha', 'Bilal', 'Hira', 'Saad', 'Sana', 'Omer', 'Iqra', 'Hassan', 'Amna', 'Talha', 'Mahnoor', 'Fahad', 'Laiba', 'Danish', 'Noor', 'Rehan', 'Areeba'];
+        const LAST = ['Raza', 'Noor', 'Tariq', 'Akhtar', 'Hassan', 'Javed', 'Khan', 'Malik', 'Ahmed', 'Shahid', 'Mehmood', 'Farooq', 'Iqbal', 'Siddiqui', 'Butt', 'Chaudhry'];
+        const STUDENTS = (() => {
+            const r = rng(2026), list = [], per = { 'Computer Science': 14, 'Software Engineering': 12, 'Artificial Intelligence': 10, 'Electrical Engineering': 8 };
+            let n = 0;
+            Object.entries(per).forEach(([dept, count]) => {
+                for (let i = 0; i < count; i++) {
+                    const name = FIRST[Math.floor(r() * FIRST.length)] + ' ' + LAST[Math.floor(r() * LAST.length)];
+                    const intake = ['FA21', 'FA22', 'SP23', 'FA23'][Math.floor(r() * 4)];
+                    n++;
+                    // a few students are habitually absent, most are regular
+                    const base = r() < 0.15 ? 0.5 + r() * 0.2 : 0.78 + r() * 0.2;
+                    const courses = COURSES.filter(c => c.dept === dept).map(c => c.code).concat(SHARED);
+                    list.push({ id: 's' + n, name, roll: `${intake}-${DEPT_CODE[dept]}-${String(n).padStart(3, '0')}`, dept, base, lateRate: 0.04 + r() * 0.1, courses });
+                }
+            });
+            return list;
+        })();
+        const COURSE_BY = Object.fromEntries(COURSES.map(c => [c.code, c]));
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e'];
+
+        /* ---------- Filters ---------- */
+        const key = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const parse = s => new Date(s + 'T00:00:00');
+        const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        $('fDept').innerHTML = '<option value="">All departments</option>' + DEPTS.map(d => `<option>${d}</option>`).join('');
+        function fillCourses() {
+            const dept = $('fDept').value, cur = $('fCourse').value;
+            const list = COURSES.filter(c => !dept || c.dept === dept || c.code === SHARED);
+            $('fCourse').innerHTML = '<option value="">All courses</option>' + list.map(c => `<option value="${c.code}">${c.code} · ${c.name}</option>`).join('');
+            if (list.some(c => c.code === cur)) $('fCourse').value = cur;
+        }
+        fillCourses();
+
+        function getRange() {
+            const v = $('fRange').value;
+            let from, to = new Date(today);
+            if (v === 'today') from = new Date(today);
+            else if (v === 'week') from = new Date(today.getTime() - ((today.getDay() + 6) % 7) * DAY);
+            else if (v === 'month') from = new Date(today.getFullYear(), today.getMonth(), 1);
+            else if (v === 'last30') from = new Date(today.getTime() - 29 * DAY);
+            else if (v === 'lastMonth') { from = new Date(today.getFullYear(), today.getMonth() - 1, 1); to = new Date(today.getFullYear(), today.getMonth(), 0); }
+            else if (v === 'semester') { from = parse(S.semStart || '2026-09-01'); const end = parse(S.semEnd || '2027-01-15'); if (end < to) to = end; }
+            else {
+                from = $('fFrom').value ? parse($('fFrom').value) : new Date(today.getTime() - 29 * DAY);
+                to = $('fTo').value ? parse($('fTo').value) : new Date(today);
+            }
+            if (to > today) to = new Date(today);       // no data in the future
+            return { from, to };
+        }
+
+        /* ---------- Build the report from the filters ---------- */
+        function buildReport() {
+            const { from, to } = getRange();
+            const dept = $('fDept').value, course = $('fCourse').value;
+            const courses = COURSES.filter(c => (!course || c.code === course) && (!dept || c.dept === dept || c.code === SHARED));
+            const courseCodes = new Set(courses.map(c => c.code));
+            const students = STUDENTS.filter(s => (!dept || s.dept === dept) && s.courses.some(c => courseCodes.has(c)));
+
+            const byDay = {}, byStudent = {}, byCourse = {}, byWeekday = {};
+            let sessions = 0;
+            students.forEach(s => byStudent[s.id] = { s, total: 0, present: 0, late: 0, absent: 0 });
+            courses.forEach(c => byCourse[c.code] = { c, total: 0, present: 0, late: 0, absent: 0, students: new Set(), sessions: 0 });
+
+            if (from <= to) {
+                for (let t = from.getTime(); t <= to.getTime(); t += DAY) {
+                    const d = new Date(t); const wd = d.getDay(); const k = key(d);
+                    courses.forEach(c => {
+                        if (!c.days.includes(wd)) return;
+                        const enrolled = students.filter(s => s.courses.includes(c.code));
+                        if (!enrolled.length) return;
+                        sessions++; byCourse[c.code].sessions++;
+                        const dayMood = rng(hash(k + c.code))() * 0.12 - 0.06;          // some days are worse than others
+                        enrolled.forEach(s => {
+                            const r = rng(hash(s.id + c.code + k))();
+                            const pPresent = Math.min(0.99, Math.max(0.2, s.base + dayMood - (wd === 5 ? 0.06 : 0) - (wd === 1 ? 0.03 : 0)));
+                            const status = r < pPresent - s.lateRate ? 'present' : r < pPresent ? 'late' : 'absent';
+                            for (const bucket of [byStudent[s.id], byCourse[c.code], (byDay[k] = byDay[k] || { d, total: 0, present: 0, late: 0, absent: 0 }), (byWeekday[wd] = byWeekday[wd] || { total: 0, present: 0, late: 0, absent: 0 })]) {
+                                bucket.total++; bucket[status]++;
+                            }
+                            byCourse[c.code].students.add(s.id);
+                        });
+                    });
+                }
+            }
+            const att = b => b.total ? ((b.present + (LATE_COUNTS ? b.late : 0)) / b.total) * 100 : 0;
+            const totals = Object.values(byStudent).reduce((a, b) => ({ total: a.total + b.total, present: a.present + b.present, late: a.late + b.late, absent: a.absent + b.absent }), { total: 0, present: 0, late: 0, absent: 0 });
+            const studentRows = Object.values(byStudent).filter(r => r.total).map(r => ({ ...r, pct: att(r) }));
+            const courseRows = Object.values(byCourse).filter(r => r.total).map(r => ({ ...r, students: r.students.size, pct: att(r) }));
+            return { from, to, dept, course, sessions, totals, avg: att(totals), byDay, byWeekday, studentRows, courseRows, att };
+        }
+
+        /* ---------- Charts ---------- */
+        Chart.defaults.font.family = '"Plus Jakarta Sans", system-ui, sans-serif';
+        Chart.defaults.color = '#8a92b2';
+        const tooltip = { backgroundColor: 'rgba(27,34,64,.92)', padding: 12, cornerRadius: 10, titleFont: { weight: 700 } };
+        const pctAxis = { min: 0, max: 100, grid: { color: 'rgba(27,34,64,.06)' }, border: { display: false }, ticks: { callback: v => v + '%', maxTicksLimit: 6 } };
+        const charts = {};
+        let grouping = 'auto';
+
+        function trendData(rep) {
+            const days = Object.values(rep.byDay).sort((a, b) => a.d - b.d);
+            const weekly = grouping === 'week' || (grouping === 'auto' && days.length > 31);
+            let buckets = days;
+            if (weekly) {
+                const m = {};
+                days.forEach(b => {
+                    const mon = new Date(b.d.getTime() - ((b.d.getDay() + 6) % 7) * DAY);
+                    const k = key(mon);
+                    m[k] = m[k] || { d: mon, total: 0, present: 0, late: 0, absent: 0 };
+                    ['total', 'present', 'late', 'absent'].forEach(f => m[k][f] += b[f]);
+                });
+                buckets = Object.values(m).sort((a, b) => a.d - b.d);
+            }
+            $('trendSub').textContent = weekly ? 'Weekly present, late and absent rates' : 'Daily present, late and absent rates';
+            const pc = (b, f) => b.total ? +(b[f] / b.total * 100).toFixed(1) : 0;
+            return {
+                labels: buckets.map(b => (weekly ? 'Wk of ' : '') + b.d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })),
+                present: buckets.map(b => pc(b, 'present')), late: buckets.map(b => pc(b, 'late')), absent: buckets.map(b => pc(b, 'absent'))
+            };
+        }
+
+        function drawCharts(rep) {
+            const ctx = $('trendChart').getContext('2d');
+            const g = ctx.createLinearGradient(0, 0, 0, 290); g.addColorStop(0, 'rgba(67,56,202,.25)'); g.addColorStop(1, 'rgba(67,56,202,0)');
+            const td = trendData(rep);
+            if (!charts.trend) {
+                charts.trend = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [
+                        { label: 'Present', data: [], borderColor: '#4338ca', backgroundColor: g, fill: true, tension: .35, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5 },
+                        { label: 'Late', data: [], borderColor: '#f59e0b', tension: .35, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5 },
+                        { label: 'Absent', data: [], borderColor: '#f43f5e', tension: .35, borderWidth: 2, borderDash: [5, 5], pointRadius: 0, pointHoverRadius: 5 }
+                    ] },
+                    options: {
+                        maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                        plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16 } }, tooltip: { ...tooltip, callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y}%` } } },
+                        scales: { x: { grid: { display: false }, border: { display: false }, ticks: { maxTicksLimit: 10, maxRotation: 0 } }, y: pctAxis }
+                    }
+                });
+            }
+            Object.assign(charts.trend.data, { labels: td.labels });
+            charts.trend.data.datasets[0].data = td.present;
+            charts.trend.data.datasets[1].data = td.late;
+            charts.trend.data.datasets[2].data = td.absent;
+            charts.trend.update();
+
+            const t = rep.totals;
+            if (!charts.donut) {
+                charts.donut = new Chart($('donutChart'), {
+                    type: 'doughnut',
+                    data: { labels: ['Present', 'Late', 'Absent'], datasets: [{ data: [], backgroundColor: ['#14b8a6', '#f59e0b', '#f43f5e'], borderColor: 'rgba(255,255,255,.9)', borderWidth: 3, hoverOffset: 6 }] },
+                    options: { maintainAspectRatio: false, cutout: '76%', plugins: { legend: { display: false }, tooltip } }
+                });
+            }
+            charts.donut.data.datasets[0].data = [t.present, t.late, t.absent];
+            charts.donut.update();
+            $('donutPct').textContent = rep.avg.toFixed(1) + '%';
+            const pc = v => t.total ? (v / t.total * 100).toFixed(1) + '%' : '0%';
+            $('donutLegend').innerHTML = [['Present', '#14b8a6', t.present], ['Late', '#f59e0b', t.late], ['Absent', '#f43f5e', t.absent]]
+                .map(([l, c, v]) => `<div class="legend-row"><span><span class="sw" style="background:${c}"></span>${l}</span><span><b>${v.toLocaleString()}</b><small>${pc(v)}</small></span></div>`).join('');
+
+            const cr = [...rep.courseRows].sort((a, b) => b.pct - a.pct);
+            const barColor = p => p >= 85 ? '#10b981' : p >= MIN_ATT ? '#f59e0b' : '#f43f5e';
+            if (!charts.course) {
+                charts.course = new Chart($('courseChart'), {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ label: 'Attendance', data: [], backgroundColor: [], borderRadius: 8, barThickness: 18 }] },
+                    options: {
+                        indexAxis: 'y', maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: c => ` ${c.parsed.x.toFixed(1)}% attendance` } } },
+                        scales: { x: { ...pctAxis }, y: { grid: { display: false }, border: { display: false }, ticks: { color: '#4a5376', font: { weight: 600 } } } }
+                    }
+                });
+            }
+            charts.course.data.labels = cr.map(r => r.c.code);
+            charts.course.data.datasets[0].data = cr.map(r => +r.pct.toFixed(1));
+            charts.course.data.datasets[0].backgroundColor = cr.map(r => barColor(r.pct));
+            charts.course.update();
+
+            const wdNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+            const wdVals = [1, 2, 3, 4, 5].map(i => rep.byWeekday[i] ? +rep.att(rep.byWeekday[i]).toFixed(1) : null);
+            if (!charts.weekday) {
+                charts.weekday = new Chart($('weekdayChart'), {
+                    type: 'bar',
+                    data: { labels: wdNames, datasets: [{ label: 'Attendance', data: [], backgroundColor: [], borderRadius: 10, barThickness: 28 }] },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: c => c.parsed.y == null ? ' No classes' : ` ${c.parsed.y}% attendance` } } },
+                        scales: { x: { grid: { display: false }, border: { display: false } }, y: pctAxis }
+                    }
+                });
+            }
+            const valid = wdVals.filter(v => v != null);
+            const minV = Math.min(...valid);
+            charts.weekday.data.datasets[0].data = wdVals;
+            charts.weekday.data.datasets[0].backgroundColor = wdVals.map(v => v === minV ? 'rgba(244,63,94,.75)' : 'rgba(67,56,202,.7)');
+            charts.weekday.update();
+        }
+
+        /* ---------- KPIs ---------- */
+        let prevKpi = {};
+        function setKpi(id, text) {
+            const el = $(id);
+            if (el.textContent === text) return;
+            el.textContent = text;
+            if (prevKpi[id] !== undefined) fx.countUp(el, 700);
+            prevKpi[id] = text;
+        }
+        function drawKpis(rep) {
+            const t = rep.totals;
+            const low = rep.studentRows.filter(r => r.pct < MIN_ATT).length;
+            setKpi('kAvg', rep.avg.toFixed(1) + '%');
+            $('kAvgSub').textContent = `${LATE_COUNTS ? 'Late counted as present' : 'Late not counted'} · goal ${MIN_ATT}%`;
+            setKpi('kSessions', rep.sessions.toLocaleString());
+            $('kSessionsSub').textContent = `${rep.courseRows.length} course${rep.courseRows.length === 1 ? '' : 's'} in range`;
+            setKpi('kCheckins', (t.present + t.late).toLocaleString());
+            $('kCheckinsSub').textContent = `of ${t.total.toLocaleString()} expected`;
+            setKpi('kLate', (t.total ? t.late / t.total * 100 : 0).toFixed(1) + '%');
+            $('kLateSub').textContent = `${t.late.toLocaleString()} late check-ins`;
+            setKpi('kLow', String(low));
+            $('kLowSub').textContent = `of ${rep.studentRows.length} students below ${MIN_ATT}%`;
+        }
+
+        /* ---------- Table ---------- */
+        let tab = 'student', sortKey = 'pct', sortDir = 1, page = 1, tq = '';
+        const PER_PAGE = 10;
+        const COLS = {
+            student: [['name', 'Student'], ['dept', 'Department'], ['total', 'Classes'], ['present', 'Present'], ['late', 'Late'], ['absent', 'Absent'], ['pct', 'Attendance'], ['status', 'Status']],
+            course: [['code', 'Course'], ['teacher', 'Teacher'], ['students', 'Students'], ['sessions', 'Sessions'], ['present', 'Present'], ['late', 'Late'], ['absent', 'Absent'], ['pct', 'Avg. Attendance']]
+        };
+        const status = p => p >= 85 ? ['Good', 'st-good'] : p >= MIN_ATT ? ['Warning', 'st-warn'] : ['Low', 'st-low'];
+        const barCol = p => p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+        const sortVal = (r, k) => ({ name: r.s?.name, dept: r.s?.dept, code: r.c?.code, teacher: r.c?.teacher, status: r.pct }[k] ?? r[k]);
+
+        function tableRows(rep) {
+            let rows = tab === 'student' ? rep.studentRows : rep.courseRows;
+            const q = tq.toLowerCase();
+            if (q) rows = rows.filter(r => (tab === 'student' ? [r.s.name, r.s.roll, r.s.dept, ...r.s.courses] : [r.c.code, r.c.name, r.c.teacher, r.c.dept]).join(' ').toLowerCase().includes(q));
+            if ($('lowOnly').checked) rows = rows.filter(r => r.pct < MIN_ATT);
+            return [...rows].sort((a, b) => {
+                const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+                return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir;
+            });
+        }
+
+        function drawTable(rep, animate) {
+            const rows = tableRows(rep);
+            const pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+            if (page > pages) page = pages;
+            const shown = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+            $('thead').innerHTML = '<tr>' + COLS[tab].map(([k, l]) => `<th data-sort="${k}" class="${k === sortKey ? 'sorted' : ''}">${l}<i class="bi ${k === sortKey ? (sortDir > 0 ? 'bi-sort-up' : 'bi-sort-down') : 'bi-arrow-down-up'}"></i></th>`).join('') + '</tr>';
+            const pctCell = p => `<div class="pct-cell"><div class="pct-bar"><span style="width:${p.toFixed(1)}%;background:${barCol(p)}"></span></div><b>${p.toFixed(1)}%</b></div>`;
+            const ini = n => n.split(' ').map(w => w[0]).join('').slice(0, 2);
+            $('tbody').innerHTML = shown.length ? shown.map((r, i) => tab === 'student' ? `
+                <tr>
+                    <td><div class="person"><div class="ini" style="background:${PALETTE[hash(r.s.id) % PALETTE.length]}">${ini(r.s.name)}</div><div><b>${ui.esc(r.s.name)}</b><small>${r.s.roll}</small></div></div></td>
+                    <td>${r.s.dept}</td>
+                    <td class="num">${r.total}</td><td class="num">${r.present}</td><td class="num">${r.late}</td><td class="num">${r.absent}</td>
+                    <td>${pctCell(r.pct)}</td>
+                    <td><span class="tag ${status(r.pct)[1]}">${status(r.pct)[0]}</span></td>
+                </tr>` : `
+                <tr>
+                    <td><div class="person"><div class="ini" style="background:${PALETTE[hash(r.c.code) % PALETTE.length]}">${r.c.code.slice(0, 2)}</div><div><b>${r.c.code}</b><small>${r.c.name}</small></div></div></td>
+                    <td>${r.c.teacher}</td>
+                    <td class="num">${r.students}</td><td class="num">${r.sessions}</td><td class="num">${r.present}</td><td class="num">${r.late}</td><td class="num">${r.absent}</td>
+                    <td>${pctCell(r.pct)}</td>
+                </tr>`).join('')
+                : `<tr><td colspan="${COLS[tab].length}"><div class="empty"><i class="bi bi-clipboard-x"></i><b>No records</b>No ${tab === 'student' ? 'students' : 'courses'} match these filters.</div></td></tr>`;
+            if (animate) fx.enter('#tbody tr');
+
+            const start = rows.length ? (page - 1) * PER_PAGE + 1 : 0;
+            let btns = `<button data-pg="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>`;
+            for (let p = 1; p <= pages; p++) {
+                if (pages > 7 && p > 2 && p < pages - 1 && Math.abs(p - page) > 1) { if (!btns.endsWith('…</span>')) btns += '<span style="padding:6px 4px">…</span>'; continue; }
+                btns += `<button data-pg="${p}" class="${p === page ? 'cur' : ''}">${p}</button>`;
+            }
+            btns += `<button data-pg="${page + 1}" ${page === pages ? 'disabled' : ''} aria-label="Next page"><i class="bi bi-chevron-right"></i></button>`;
+            $('pager').innerHTML = `<span>Showing ${start}–${Math.min(page * PER_PAGE, rows.length)} of ${rows.length} ${tab === 'student' ? 'students' : 'courses'}</span><div class="pg">${btns}</div>`;
+            $('tableSub').textContent = `${tab === 'student' ? 'Per-student' : 'Per-course'} totals for ${fmt(rep.from)} – ${fmt(rep.to)}`;
+        }
+
+        $('thead').addEventListener('click', e => {
+            const th = e.target.closest('[data-sort]'); if (!th) return;
+            if (sortKey === th.dataset.sort) sortDir *= -1; else { sortKey = th.dataset.sort; sortDir = ['name', 'dept', 'code', 'teacher'].includes(sortKey) ? 1 : -1; }
+            drawTable(report, false);
+        });
+        $('pager').addEventListener('click', e => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; page = +b.dataset.pg; drawTable(report, true); });
+        $('tableSeg').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b || b.dataset.t === tab) return;
+            tab = b.dataset.t; page = 1; sortKey = 'pct'; sortDir = tab === 'student' ? 1 : -1;
+            document.querySelectorAll('#tableSeg button').forEach(x => x.classList.toggle('active', x === b));
+            drawTable(report, true);
+        });
+        let ts;
+        const onSearch = v => { clearTimeout(ts); ts = setTimeout(() => { tq = v.trim(); page = 1; drawTable(report, true); }, 180); };
+        $('tblSearch').addEventListener('input', e => { $('topSearch').value = e.target.value; onSearch(e.target.value); });
+        $('topSearch').addEventListener('input', e => { $('tblSearch').value = e.target.value; onSearch(e.target.value); });
+        $('lowOnly').addEventListener('change', () => { page = 1; drawTable(report, true); });
+        $('trendSeg').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b) return;
+            grouping = b.dataset.g;
+            document.querySelectorAll('#trendSeg button').forEach(x => x.classList.toggle('active', x === b));
+            drawCharts(report);
+        });
+
+        /* ---------- Refresh everything when a filter changes ---------- */
+        let report;
+        function refresh(animate) {
+            report = buildReport();
+            const deptTxt = report.dept || 'All departments';
+            const courseTxt = report.course ? `${report.course} · ${COURSE_BY[report.course].name}` : 'All courses';
+            $('rangeNote').innerHTML = `Showing <b>${fmt(report.from)} – ${fmt(report.to)}</b> · ${ui.esc(deptTxt)} · ${ui.esc(courseTxt)}`;
+            $('printMeta').textContent = `${fmt(report.from)} – ${fmt(report.to)} · ${deptTxt} · ${courseTxt} · Generated ${new Date().toLocaleString()}`;
+            drawKpis(report);
+            drawCharts(report);
+            page = 1;
+            drawTable(report, animate);
+            if (animate) document.querySelectorAll('.kpi').forEach(k => fx.bump(k.querySelector('.value')));
+        }
+        $('fRange').addEventListener('change', () => {
+            const custom = $('fRange').value === 'custom';
+            $('fromWrap').style.display = $('toWrap').style.display = custom ? '' : 'none';
+            if (custom && !$('fFrom').value) { $('fFrom').value = key(new Date(today.getTime() - 29 * DAY)); $('fTo').value = key(today); }
+            refresh(true);
+        });
+        ['fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', () => {
+            if ($('fFrom').value && $('fTo').value && $('fFrom').value > $('fTo').value) { $(id).classList.add('invalid'); return ui.toast('"From" date must be before "To" date.', 'error'); }
+            $('fFrom').classList.remove('invalid'); $('fTo').classList.remove('invalid');
+            refresh(true);
+        }));
+        $('fDept').addEventListener('change', () => { fillCourses(); refresh(true); });
+        $('fCourse').addEventListener('change', () => refresh(true));
+        $('resetBtn').addEventListener('click', () => {
+            $('fRange').value = 'month'; $('fDept').value = ''; fillCourses(); $('fCourse').value = '';
+            $('fromWrap').style.display = $('toWrap').style.display = 'none';
+            $('tblSearch').value = $('topSearch').value = ''; tq = ''; $('lowOnly').checked = false;
+            refresh(true); ui.toast('Filters reset.', 'info');
+        });
+
+        /* ---------- Export ---------- */
+        $('csvBtn').addEventListener('click', () => {
+            const rows = tableRows(report);
+            if (!rows.length) return ui.toast('Nothing to export for these filters.', 'error');
+            const head = tab === 'student'
+                ? ['Student', 'Roll No', 'Department', 'Classes', 'Present', 'Late', 'Absent', 'Attendance %', 'Status']
+                : ['Course', 'Course Name', 'Teacher', 'Students', 'Sessions', 'Present', 'Late', 'Absent', 'Avg Attendance %'];
+            const body = rows.map(r => tab === 'student'
+                ? [r.s.name, r.s.roll, r.s.dept, r.total, r.present, r.late, r.absent, r.pct.toFixed(1), status(r.pct)[0]]
+                : [r.c.code, r.c.name, r.c.teacher, r.students, r.sessions, r.present, r.late, r.absent, r.pct.toFixed(1)]);
+            const csv = [head, ...body].map(line => line.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `geoattend-${tab}-report-${key(report.from)}-to-${key(report.to)}.csv`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            fx.success($('csvBtn'), 'Exported');
+            ui.toast(`${rows.length} rows exported to CSV.`);
+        });
+        $('printBtn').addEventListener('click', () => {
+            // print every row (not just the current page), then put the paged table back
+            drawTableFull(tableRows(report));
+            setTimeout(() => { window.print(); drawTable(report, false); }, 100);
+        });
+        function drawTableFull(rows) {
+            const pctTxt = p => `${p.toFixed(1)}%`;
+            $('tbody').innerHTML = rows.map(r => tab === 'student'
+                ? `<tr><td><b>${ui.esc(r.s.name)}</b><br><small>${r.s.roll}</small></td><td>${r.s.dept}</td><td>${r.total}</td><td>${r.present}</td><td>${r.late}</td><td>${r.absent}</td><td>${pctTxt(r.pct)}</td><td>${status(r.pct)[0]}</td></tr>`
+                : `<tr><td><b>${r.c.code}</b><br><small>${r.c.name}</small></td><td>${r.c.teacher}</td><td>${r.students}</td><td>${r.sessions}</td><td>${r.present}</td><td>${r.late}</td><td>${r.absent}</td><td>${pctTxt(r.pct)}</td></tr>`).join('');
+        }
+
+        /* ---------- Init ---------- */
+        refresh(false);
+        fx.enter('.page-head, .filter-bar, #kpis > div, .main > .row > div, .main > .panel');
+        document.querySelectorAll('.kpi .value').forEach(v => fx.countUp(v));
+    </script>
+</body>
+</html>
