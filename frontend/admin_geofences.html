@@ -138,8 +138,8 @@
         <ul class="side-nav">
             <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
             <li><a href="admin_students.html"><i class="bi bi-mortarboard"></i> Students</a></li>
-            <li><a href="#"><i class="bi bi-person-video3"></i> Teachers</a></li>
-            <li><a href="#"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+            <li><a href="admin_teachers.html"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="admin_courses.html"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
         </ul>
         <div class="nav-label">Attendance</div>
         <ul class="side-nav">
@@ -298,6 +298,7 @@
     </aside>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="assets/data.js"></script>
     <script src="assets/admin.js"></script>
     <script src="assets/fx.js"></script>
     <script src="assets/topbar.js"></script>
@@ -316,26 +317,13 @@
             campus:    { label: 'Campus', icon: 'bi-geo-alt', color: '#f59e0b' },
             other:     { label: 'Other', icon: 'bi-pin-map', color: '#8b5cf6' }
         };
-        const COURSES = ['CS301', 'CS205', 'SE210', 'AI402', 'MT105', 'EE110'];
-        const LIVE = ['CS301', 'SE210', 'AI402', 'MT105'];   // sample: courses with a session running now
+        const COURSES = GA.loadCourses().filter(c => c.status !== 'inactive').map(c => c.code);   // shared course catalogue
+        const LIVE = GA.liveCodes();   // courses with a session running now
 
         function settings() { try { return JSON.parse(localStorage.getItem('ga_settings')) || {}; } catch { return {}; } }
-        function sampleZones() {
-            const s = settings();
-            const c = [s.campusLat || 33.6844, s.campusLng || 73.0479];
-            return [
-                { id: 'z1', name: 'Main Campus', type: 'campus', building: 'Whole campus boundary', lat: c[0], lng: c[1], radius: 300, active: true, courses: [] },
-                { id: 'z2', name: 'Room B-204', type: 'classroom', building: 'Block B, 2nd floor', lat: 33.6849, lng: 73.0472, radius: 50, active: true, courses: ['CS301', 'CS205'] },
-                { id: 'z3', name: 'Lab 3', type: 'lab', building: 'IT Block, 1st floor', lat: 33.6838, lng: 73.0486, radius: 40, active: true, courses: ['SE210'] },
-                { id: 'z4', name: 'Hall A', type: 'hall', building: 'Main Academic Block', lat: 33.6852, lng: 73.0491, radius: 60, active: true, courses: ['AI402'] },
-                { id: 'z5', name: 'Room C-110', type: 'classroom', building: 'Block C, ground floor', lat: 33.6835, lng: 73.0466, radius: 45, active: true, courses: ['MT105'] },
-                { id: 'z6', name: 'Central Library', type: 'other', building: 'Library building', lat: 33.6858, lng: 73.0462, radius: 35, active: false, courses: [] }
-            ];
-        }
-        function load() { try { const z = JSON.parse(localStorage.getItem('ga_geofences')); if (Array.isArray(z)) return z; } catch {} return sampleZones(); }
-        function persist() { try { localStorage.setItem('ga_geofences', JSON.stringify(zones)); } catch {} }
+        function persist() { GA.saveZones(zones); }
 
-        let zones = load();
+        let zones = GA.loadZones();
         let filter = 'all', query = '', selectedId = null;
 
         // Distance in metres between two points (haversine formula)

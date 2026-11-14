@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Courses | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        .st-inactive { color: #64748b; background: rgba(100,116,139,.12); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .live-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.8s infinite; }
+        .warn-tag { color: #be123c; background: rgba(244,63,94,.10); }
+        .full-tag { color: #b45309; background: rgba(245,158,11,.14); }
+
+        /* ---------- Course cards ---------- */
+        .c-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .c-card {
+            position: relative; border-radius: 18px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
+            background: rgba(255,255,255,.62); border: 1.5px solid rgba(255,255,255,.9); transition: transform .25s, box-shadow .25s, border-color .2s;
+        }
+        .c-card:hover { transform: translateY(-4px); box-shadow: 0 18px 32px -18px rgba(48,56,120,.5); }
+        .c-card.checked { border-color: var(--primary); }
+        .c-card.off { opacity: .7; }
+        .c-top { padding: 14px 16px 12px; color: #fff; position: relative; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .c-top .ck { position: absolute; top: 14px; right: 14px; accent-color: #fff; }
+        .c-top .code { font-size: 12px; font-weight: 800; letter-spacing: .5px; opacity: .9; }
+        .c-top h4 { font-size: 16.5px; font-weight: 800; margin: 2px 0 2px; padding-right: 26px; }
+        .c-top small { font-size: 12px; opacity: .9; }
+        .c-top .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+        .c-top .badges .tag { background: rgba(255,255,255,.22); color: #fff; }
+        .c-top .badges .live-tag { background: #fff; color: #047857; }
+        .c-body { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .c-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+        .c-line i { color: var(--muted); width: 16px; text-align: center; }
+        .c-teacher { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .c-teacher .ini { width: 28px; height: 28px; border-radius: 9px; font-size: 11px; }
+        .c-teacher b { font-size: 13px; color: var(--ink); }
+        .unassigned { color: #be123c; font-weight: 700; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+        .c-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); }
+        .c-foot .grow { flex: 1; }
+        .c-foot small { font-size: 11.5px; color: var(--muted); }
+        .mini-ring { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+        .mini-ring span { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+
+        /* ---------- Timetable view ---------- */
+        .tt-wrap { overflow-x: auto; }
+        .tt { display: grid; grid-template-columns: 70px repeat(5, minmax(150px, 1fr)); gap: 6px; min-width: 820px; }
+        .tt .h { font-size: 12px; font-weight: 800; color: var(--ink-2); text-align: center; padding: 8px 0; border-radius: 10px; background: rgba(27,34,64,.04); }
+        .tt .h.today { background: rgba(67,56,202,.10); color: var(--primary); }
+        .tt .t { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 8px; }
+        .tt .cell { min-height: 64px; border-radius: 12px; background: rgba(27,34,64,.025); border: 1px dashed rgba(27,34,64,.06); display: flex; flex-direction: column; gap: 4px; padding: 4px; }
+        .tt .blk {
+            border-radius: 10px; padding: 7px 9px; color: #fff; cursor: pointer; font-size: 12px; line-height: 1.3; position: relative;
+            background: linear-gradient(135deg, var(--c1), var(--c2)); transition: transform .2s, box-shadow .2s; animation: fxIn .35s ease backwards;
+        }
+        .tt .blk:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 18px -10px rgba(27,34,64,.6); }
+        .tt .blk b { display: block; font-size: 12.5px; }
+        .tt .blk small { display: block; opacity: .92; font-size: 11px; }
+        .tt .blk .live-dot { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: fxDotPulse 1.8s infinite; }
+        .tt-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+        .tt-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .tt-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+        /* ---------- Form ---------- */
+        .days { display: flex; gap: 6px; }
+        .days label { flex: 1; }
+        .days span { justify-content: center; width: 100%; }
+        .clash { display: none; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: #9f1239; background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.25); margin-top: 10px; }
+        .clash.show { display: flex; animation: fxIn .3s ease; }
+
+        /* ---------- Details ---------- */
+        .d-hero { padding: 18px; border-radius: 18px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); margin-bottom: 16px; position: relative; overflow: hidden; }
+        .d-hero::after { content: ""; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,.12); }
+        .d-hero .code { font-size: 12px; font-weight: 800; opacity: .9; }
+        .d-hero b { display: block; font-size: 20px; font-weight: 800; }
+        .d-hero small { opacity: .92; }
+        .d-hero .tag { background: rgba(255,255,255,.22); color: #fff; margin-top: 8px; }
+        .d-hero .live-tag { background: #fff; color: #047857; }
+        .stu-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+        .stu-row:last-child { border-bottom: 0; }
+        .stu-row .ini { width: 32px; height: 32px; border-radius: 10px; font-size: 11.5px; }
+        .stu-row b { font-size: 13px; display: block; color: var(--ink); }
+        .stu-row small { font-size: 12px; color: var(--muted); }
+        .stu-row .rm { margin-left: auto; border: 0; background: transparent; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+        .stu-row .rm:hover { color: var(--rose); background: rgba(244,63,94,.08); }
+        .add-row { display: flex; gap: 8px; margin: 10px 0 6px; }
+        .add-row .f-select { flex: 1; }
+        .sess-chart { display: flex; align-items: flex-end; gap: 6px; height: 110px; padding: 6px 0 0; margin-bottom: 8px; }
+        .sess-chart div { flex: 1; border-radius: 6px 6px 3px 3px; transform-origin: bottom; animation: barUp .6s cubic-bezier(.2,.8,.3,1) backwards; position: relative; }
+        @keyframes barUp { from { transform: scaleY(0); } }
+        .sess-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+        .sess-row:last-child { border-bottom: 0; }
+        .sess-row .when { width: 92px; flex-shrink: 0; color: var(--ink); font-weight: 600; }
+        .sess-row .when small { display: block; color: var(--muted); font-weight: 500; font-size: 11.5px; }
+        .sess-row .nums { font-size: 12px; color: var(--muted); white-space: nowrap; }
+        .p-actions { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 575.98px) { .p-actions { grid-template-columns: 1fr 1fr; } .c-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="admin_students.html"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="admin_teachers.html"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="admin_courses.html" class="active"><i class="bi bi-journal-bookmark-fill"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#"><i class="bi bi-broadcast"></i> Live Sessions</a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search courses by code, name, teacher or room...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Courses</div>
+                <h2>Courses</h2>
+                <p>Course catalogue, class schedules, teachers, enrolments and attendance zones.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn-glass" id="importBtn"><i class="bi bi-upload"></i> Import CSV</button>
+                <button class="btn-glass" id="exportBtn"><i class="bi bi-download"></i> Export</button>
+                <button class="btn-primary-grad" id="addBtn"><i class="bi bi-plus-lg"></i> New Course</button>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4" id="stats">
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-journal-bookmark-fill"></i></div><div><div class="label">Total Courses</div><div class="value" id="sTotal">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-broadcast"></i></div><div><div class="label">Live Now</div><div class="value" id="sLive">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="stat-icon"><i class="bi bi-people-fill"></i></div><div><div class="label">Enrolments</div><div class="value" id="sEnrol">0</div></div></div></div>
+            <div class="col-6 col-md-6 col-xl"><div class="stat glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="stat-icon"><i class="bi bi-person-x-fill"></i></div><div><div class="label">Without Teacher</div><div class="value" id="sNoTeacher">0</div></div></div></div>
+            <div class="col-12 col-md-6 col-xl"><div class="stat glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="stat-icon"><i class="bi bi-graph-up-arrow"></i></div><div><div class="label">Avg. Attendance</div><div class="value" id="sAvg">0%</div></div></div></div>
+        </div>
+
+        <div class="panel glass">
+            <div class="status-chips chips" id="statusChips"></div>
+            <div class="toolbar">
+                <div class="tb-search"><i class="bi bi-search"></i><input class="f-input" id="search" placeholder="Search code, name, teacher, room"></div>
+                <select class="f-select" id="fDept" aria-label="Department"></select>
+                <select class="f-select" id="fSem" aria-label="Semester"></select>
+                <div class="seg" id="viewSeg">
+                    <button data-v="cards" title="Cards" aria-label="Card view"><i class="bi bi-grid-3x3-gap"></i></button>
+                    <button data-v="table" title="Table" aria-label="Table view"><i class="bi bi-list-ul"></i></button>
+                    <button data-v="tt" title="Weekly timetable" aria-label="Timetable view"><i class="bi bi-calendar-week"></i></button>
+                </div>
+            </div>
+            <div class="bulk" id="bulk">
+                <b id="bulkCount">0 selected</b>
+                <button class="btn-glass" data-bulk="activate"><i class="bi bi-toggle-on"></i> Activate</button>
+                <button class="btn-glass" data-bulk="deactivate"><i class="bi bi-toggle-off"></i> Deactivate</button>
+                <button class="btn-glass" data-bulk="export"><i class="bi bi-download"></i> Export</button>
+                <button class="btn-danger-soft" data-bulk="delete" style="padding:7px 12px;font-size:12.5px"><i class="bi bi-trash3"></i> Delete</button>
+                <button class="link-btn clear" data-bulk="clear">Clear selection</button>
+            </div>
+            <div id="listArea"></div>
+        </div>
+    </main>
+
+    <!-- ================= ADD / EDIT DRAWER ================= -->
+    <div class="drawer-shade" id="shade"></div>
+    <aside class="drawer glass" id="formDrawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3 id="formTitle">New Course</h3><p>Fields marked * are required.</p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form class="drawer-body" id="cForm" novalidate>
+            <div class="row g-3">
+                <div class="col-sm-4"><label class="f-label" for="fCode">Code *</label><input class="f-input" id="fCode" maxlength="6" placeholder="CS301"></div>
+                <div class="col-sm-8"><label class="f-label" for="fName">Course name *</label><input class="f-input" id="fName" maxlength="50" placeholder="e.g. Database Systems"></div>
+                <div class="col-sm-6"><label class="f-label" for="fDeptIn">Department *</label><select class="f-select" id="fDeptIn"></select></div>
+                <div class="col-sm-6"><label class="f-label" for="fStatus">Status</label><select class="f-select" id="fStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                <div class="col-4"><label class="f-label" for="fCr">Credits</label><select class="f-select" id="fCr"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div>
+                <div class="col-4"><label class="f-label" for="fSemIn">Semester</label><select class="f-select" id="fSemIn"></select></div>
+                <div class="col-4"><label class="f-label" for="fCap">Capacity</label><input class="f-input" id="fCap" type="number" min="5" max="300" value="50"></div>
+
+                <div class="col-12"><label class="f-label">Class days *</label><div class="chips days" id="fDays"></div></div>
+                <div class="col-sm-4 col-6"><label class="f-label" for="fTime">Start time</label><input class="f-input" id="fTime" type="time" value="09:00" step="900"></div>
+                <div class="col-sm-4 col-6"><label class="f-label" for="fDur">Duration</label><select class="f-select" id="fDur"><option value="60">1 hour</option><option value="90" selected>1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours (lab)</option></select></div>
+                <div class="col-sm-4"><label class="f-label" for="fRoom">Room *</label><input class="f-input" id="fRoom" maxlength="20" placeholder="Room B-204"></div>
+                <div class="col-12"><div class="clash" id="clash"><i class="bi bi-exclamation-triangle"></i><span></span></div></div>
+
+                <div class="col-sm-6"><label class="f-label" for="fTeacher">Teacher</label><select class="f-select" id="fTeacher"></select></div>
+                <div class="col-sm-6"><label class="f-label" for="fZone">Attendance geofence</label><select class="f-select" id="fZone"></select></div>
+                <div class="col-12"><label class="f-label" for="fDesc">Description</label><textarea class="f-input" id="fDesc" maxlength="200" rows="3" placeholder="What the course covers"></textarea></div>
+            </div>
+            <button type="submit" hidden></button>
+        </form>
+        <div class="drawer-foot">
+            <button type="button" class="btn-glass" data-close>Cancel</button>
+            <button type="button" class="btn-primary-grad" id="saveBtn"><i class="bi bi-check2-circle"></i> Save Course</button>
+        </div>
+    </aside>
+
+    <!-- ================= DETAILS DRAWER ================= -->
+    <aside class="drawer glass wide" id="detailDrawer" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3>Course Details</h3><p id="dSub"></p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="drawer-body" id="dBody"></div>
+        <div class="drawer-foot" id="dFoot"></div>
+    </aside>
+
+    <!-- ================= IMPORT MODAL ================= -->
+    <div class="n-modal" id="importModal">
+        <div class="box glass">
+            <h4><i class="bi bi-upload text-primary"></i> Import Courses</h4>
+            <p>CSV columns: <b>code, name, department, credits, semester, capacity, days, time, room</b>. Write days like <b>Mon;Wed</b>.</p>
+            <label class="import-drop" id="drop">
+                <i class="bi bi-filetype-csv"></i>
+                <b>Click to choose a CSV file</b><br>or drag and drop it here
+                <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+            </label>
+            <div class="d-flex gap-2 justify-content-between align-items-center mt-3">
+                <button class="link-btn px-0" id="templateBtn"><i class="bi bi-file-earmark-arrow-down"></i> Download template</button>
+                <button class="btn-glass" id="iCancel">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/data.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * COURSES — reads/writes the shared demo data in assets/data.js
+         * (ga_courses, ga_teachers, ga_students, ga_geofences, ga_live) so Teachers, Students and Geofences stay in sync.
+         * Later these calls go to the backend API.
+         */
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const SETTINGS = GA.settings();
+        const MIN_ATT = SETTINGS.minAttendance || 75;
+        const DAYN = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        const DEPT_COLORS = {
+            'Computer Science': ['#4338ca', '#6d5ce8'], 'Software Engineering': ['#0d9488', '#14b8a6'], 'Artificial Intelligence': ['#7c3aed', '#a855f7'],
+            'Information Technology': ['#0369a1', '#0ea5e9'], 'Electrical Engineering': ['#c2410c', '#f59e0b'], 'Mathematics': ['#be123c', '#f43f5e']
+        };
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+
+        let courses = GA.loadCourses();
+        let teachers = GA.loadTeachers();
+        let students = GA.loadStudents();
+        const zones = GA.loadZones();
+        let live = GA.liveCodes();
+
+        function saveAll() { GA.saveCourses(courses); GA.saveTeachers(teachers); GA.saveStudents(students); GA.saveLive(live); }
+
+        /* ---------- Derived ---------- */
+        const teacherOf = code => teachers.find(t => t.courses.includes(code));
+        const enrolled = code => students.filter(s => s.courses.includes(code) && s.status !== 'pending');
+        const courseAtt = code => 72 + (GA.hash(code + 'att') % 24);   // sample average attendance (same formula as Teachers)
+        const isLive = c => c.status === 'active' && live.includes(c.code);
+        const colors = c => DEPT_COLORS[c.dept] || ['#4338ca', '#6d5ce8'];
+        const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const endTime = c => { const m = toMin(c.time) + c.dur; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+        const overlap = (a, b) => a.days.some(d => b.days.includes(d)) && toMin(a.time) < toMin(b.time) + b.dur && toMin(b.time) < toMin(a.time) + a.dur;
+        const initials = n => n.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, '').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const pcolor = id => PALETTE[GA.hash(id) % PALETTE.length];
+        const ringCol = p => p >= 85 ? '#10b981' : p >= MIN_ATT ? '#f59e0b' : '#f43f5e';
+        const barCol = p => p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+        const zoneName = id => zones.find(z => z.id === id)?.name || 'Main Campus';
+        const sched = c => `${c.days.map(d => DAYN[d]).join(' / ')} · ${c.time}–${endTime(c)}`;
+
+        /* ---------- Filters ---------- */
+        $('fDept').innerHTML = '<option value="">All departments</option>' + GA.DEPARTMENTS.map(d => `<option>${d}</option>`).join('');
+        $('fSem').innerHTML = '<option value="">All semesters</option>' + [1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}">Semester ${n}</option>`).join('');
+        $('fDeptIn').innerHTML = GA.DEPARTMENTS.map(d => `<option>${d}</option>`).join('');
+        $('fSemIn').innerHTML = [1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}">${n}</option>`).join('');
+        $('fDays').innerHTML = [1, 2, 3, 4, 5].map(d => `<label><input type="checkbox" value="${d}"><span>${DAYN[d]}</span></label>`).join('');
+
+        let status = 'all', query = '', view = window.innerWidth < 768 ? 'cards' : 'cards';
+        const selected = new Set();
+        document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === view));
+
+        function renderChips() {
+            const c = {
+                all: courses.length, active: courses.filter(x => x.status === 'active').length, live: courses.filter(isLive).length,
+                noteacher: courses.filter(x => !teacherOf(x.code)).length, full: courses.filter(x => enrolled(x.code).length >= x.capacity).length,
+                low: courses.filter(x => courseAtt(x.code) < MIN_ATT).length, inactive: courses.filter(x => x.status === 'inactive').length
+            };
+            const chips = [['all', 'All', 'bi-grid'], ['active', 'Active', 'bi-check2-circle'], ['live', 'Live now', 'bi-broadcast'], ['noteacher', 'No teacher', 'bi-person-x'],
+                ['full', 'Full', 'bi-people-fill'], ['low', 'Low attendance', 'bi-exclamation-triangle'], ['inactive', 'Inactive', 'bi-pause-circle']];
+            $('statusChips').innerHTML = chips.map(([k, l, i]) => `<label><input type="radio" name="st" value="${k}" ${status === k ? 'checked' : ''}><span><i class="bi ${i}"></i> ${l} <span class="cnt">${c[k]}</span></span></label>`).join('');
+        }
+        function filtered() {
+            const q = query.toLowerCase(), dept = $('fDept').value, sem = $('fSem').value;
+            return courses.filter(c => {
+                if (status === 'live' && !isLive(c)) return false;
+                if (status === 'noteacher' && teacherOf(c.code)) return false;
+                if (status === 'full' && enrolled(c.code).length < c.capacity) return false;
+                if (status === 'low' && courseAtt(c.code) >= MIN_ATT) return false;
+                if (['active', 'inactive'].includes(status) && c.status !== status) return false;
+                if (dept && c.dept !== dept) return false;
+                if (sem && String(c.sem) !== sem) return false;
+                if (q && ![c.code, c.name, c.dept, c.room, teacherOf(c.code)?.name || ''].join(' ').toLowerCase().includes(q)) return false;
+                return true;
+            }).sort((a, b) => a.code.localeCompare(b.code));
+        }
+
+        function setStat(id, v) { const el = $(id); if (el.textContent !== String(v)) { const first = el.dataset.init !== '1'; el.textContent = v; el.dataset.init = '1'; if (!first) fx.bump(el); } }
+        function renderStats() {
+            const act = courses.filter(c => c.status === 'active');
+            setStat('sTotal', courses.length);
+            setStat('sLive', courses.filter(isLive).length);
+            setStat('sEnrol', courses.reduce((a, c) => a + enrolled(c.code).length, 0));
+            setStat('sNoTeacher', courses.filter(c => !teacherOf(c.code)).length);
+            setStat('sAvg', (act.length ? act.reduce((a, c) => a + courseAtt(c.code), 0) / act.length : 0).toFixed(1) + '%');
+        }
+
+        /* ---------- Render ---------- */
+        function teacherHtml(c, small) {
+            const t = teacherOf(c.code);
+            if (!t) return `<span class="unassigned"><i class="bi bi-person-x"></i> No teacher</span>`;
+            return `<div class="c-teacher"><div class="ini" style="background:${pcolor(t.id)}">${initials(t.name)}</div><div><b>${esc(t.name)}</b>${small ? '' : `<br><small class="text-muted">${esc(t.desig)}</small>`}</div></div>`;
+        }
+        function enrolBar(c) {
+            const n = enrolled(c.code).length, p = Math.min(100, n / c.capacity * 100);
+            return `<div class="row-between" style="font-size:12px"><span>${n} / ${c.capacity} students</span>${n >= c.capacity ? '<span class="tag full-tag">Full</span>' : ''}</div>
+                <div class="pct-bar mt-1"><span style="width:${p}%;background:${n >= c.capacity ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#818cf8,#4338ca)'}"></span></div>`;
+        }
+
+        function render(animate) {
+            renderStats(); renderChips();
+            const rows = filtered();
+            if (!rows.length && view !== 'tt') {
+                $('listArea').innerHTML = `<div class="empty"><i class="bi bi-journal-x"></i><b>No courses found</b>Try changing the filters or add a new course.</div>`;
+            } else if (view === 'cards') {
+                $('listArea').innerHTML = `<div class="c-grid">${rows.map(c => {
+                    const [c1, c2] = colors(c), a = courseAtt(c.code);
+                    return `
+                    <div class="c-card ${selected.has(c.code) ? 'checked' : ''} ${c.status === 'inactive' ? 'off' : ''}" data-row="${c.code}" style="--c1:${c1};--c2:${c2}">
+                        <div class="c-top">
+                            <input type="checkbox" class="ck" data-ck="${c.code}" ${selected.has(c.code) ? 'checked' : ''} aria-label="Select ${c.code}">
+                            <div class="code">${c.code} · ${c.cr} CREDITS</div>
+                            <h4>${esc(c.name)}</h4>
+                            <small>${esc(c.dept)} · Semester ${c.sem}</small>
+                            <div class="badges">
+                                ${isLive(c) ? '<span class="tag live-tag">LIVE NOW</span>' : ''}
+                                ${c.status === 'inactive' ? '<span class="tag">Inactive</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="c-body">
+                            ${teacherHtml(c)}
+                            <div class="c-line"><i class="bi bi-clock"></i> ${sched(c)}</div>
+                            <div class="c-line"><i class="bi bi-geo-alt"></i> ${esc(c.room)} · <span class="text-muted">${esc(zoneName(c.zone))}</span></div>
+                            <div class="c-foot">
+                                <div class="grow">${enrolBar(c)}</div>
+                                <div class="mini-ring" style="background:conic-gradient(${ringCol(a)} ${a}%, rgba(27,34,64,.08) 0)" title="Average attendance"><span style="color:${ringCol(a)}">${a}%</span></div>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}</div>`;
+                if (animate) fx.enter('#listArea .c-card');
+            } else if (view === 'table') {
+                const allChecked = rows.length && rows.every(c => selected.has(c.code));
+                $('listArea').innerHTML = `
+                    <div class="table-responsive"><table class="table table-glass">
+                        <thead><tr>
+                            <th style="width:36px"><input type="checkbox" class="ck" id="ckAll" ${allChecked ? 'checked' : ''} aria-label="Select all"></th>
+                            <th>Course</th><th>Teacher</th><th>Schedule</th><th>Enrolment</th><th>Attendance</th><th>Status</th><th></th>
+                        </tr></thead>
+                        <tbody>${rows.map(c => {
+                            const [c1, c2] = colors(c), a = courseAtt(c.code);
+                            return `
+                            <tr data-row="${c.code}" class="${selected.has(c.code) ? 'checked' : ''}">
+                                <td><input type="checkbox" class="ck" data-ck="${c.code}" ${selected.has(c.code) ? 'checked' : ''} aria-label="Select ${c.code}"></td>
+                                <td><div class="person"><div class="ini" style="background:linear-gradient(135deg,${c1},${c2});font-size:10.5px">${c.code}</div><div><b>${esc(c.name)}</b><small>${esc(c.dept)} · Sem ${c.sem} · ${c.cr} cr</small></div></div></td>
+                                <td>${teacherHtml(c, true)}</td>
+                                <td><small>${c.days.map(d => DAYN[d]).join(' / ')}</small><br><small class="text-muted">${c.time}–${endTime(c)} · ${esc(c.room)}</small></td>
+                                <td style="min-width:140px">${enrolBar(c)}</td>
+                                <td><div class="pct-cell"><div class="pct-bar"><span style="width:${a}%;background:${barCol(a)}"></span></div><b>${a}%</b></div></td>
+                                <td><span class="tag ${c.status === 'active' ? 'st-active' : 'st-inactive'}">${c.status === 'active' ? 'Active' : 'Inactive'}</span>${isLive(c) ? '<br><span class="tag live-tag mt-1">LIVE</span>' : ''}</td>
+                                <td><div class="row-act">
+                                    <button data-act="view" data-id="${c.code}" title="Details" aria-label="Details ${c.code}"><i class="bi bi-eye"></i></button>
+                                    <button data-act="edit" data-id="${c.code}" title="Edit" aria-label="Edit ${c.code}"><i class="bi bi-pencil"></i></button>
+                                    <button class="del" data-act="delete" data-id="${c.code}" title="Delete" aria-label="Delete ${c.code}"><i class="bi bi-trash3"></i></button>
+                                </div></td>
+                            </tr>`;
+                        }).join('')}</tbody>
+                    </table></div>`;
+                if (animate) fx.enter('#listArea tbody tr');
+            } else {
+                renderTimetable(rows.filter(c => c.status === 'active'));
+            }
+            renderBulk();
+        }
+
+        function renderTimetable(list) {
+            const times = [...new Set(list.map(c => c.time))].sort();
+            const today = new Date().getDay();
+            let html = '<div class="tt-wrap"><div class="tt"><div></div>' + [1, 2, 3, 4, 5].map(d => `<div class="h ${d === today ? 'today' : ''}">${DAYN[d]}${d === today ? ' · Today' : ''}</div>`).join('');
+            let i = 0;
+            times.forEach(time => {
+                html += `<div class="t">${time}</div>`;
+                for (let d = 1; d <= 5; d++) {
+                    const here = list.filter(c => c.time === time && c.days.includes(d));
+                    html += `<div class="cell">${here.map(c => {
+                        const [c1, c2] = colors(c), t = teacherOf(c.code);
+                        return `<div class="blk" data-row="${c.code}" style="--c1:${c1};--c2:${c2};animation-delay:${(i++) * 25}ms" title="${esc(c.name)}">
+                            ${isLive(c) && d === today ? '<span class="live-dot"></span>' : ''}
+                            <b>${c.code}</b><small>${esc(c.room)} · ${c.time}–${endTime(c)}</small><small>${t ? esc(t.name) : 'No teacher'}</small></div>`;
+                    }).join('')}</div>`;
+                }
+            });
+            html += '</div></div>';
+            html += `<div class="tt-legend">${Object.entries(DEPT_COLORS).map(([d, [c1, c2]]) => `<span><i style="background:linear-gradient(135deg,${c1},${c2})"></i>${d}</span>`).join('')}</div>`;
+            $('listArea').innerHTML = times.length ? html : `<div class="empty"><i class="bi bi-calendar-x"></i><b>Nothing scheduled</b>No active courses match these filters.</div>`;
+        }
+
+        function renderBulk() {
+            $('bulk').classList.toggle('show', selected.size > 0 && view !== 'tt');
+            $('bulkCount').textContent = `${selected.size} selected`;
+        }
+
+        /* ---------- Interactions ---------- */
+        $('listArea').addEventListener('click', e => {
+            const ck = e.target.closest('[data-ck]');
+            if (ck) { e.stopPropagation(); ck.checked ? selected.add(ck.dataset.ck) : selected.delete(ck.dataset.ck); ck.closest('[data-row]').classList.toggle('checked', ck.checked); renderBulk(); return; }
+            if (e.target.id === 'ckAll') { document.querySelectorAll('#listArea [data-ck]').forEach(c => e.target.checked ? selected.add(c.dataset.ck) : selected.delete(c.dataset.ck)); render(false); return; }
+            const btn = e.target.closest('[data-act]');
+            if (btn) { e.stopPropagation(); return act(btn.dataset.act, btn.dataset.id); }
+            const row = e.target.closest('[data-row]');
+            if (row) openDetails(row.dataset.row);
+        });
+        $('statusChips').addEventListener('change', e => { status = e.target.value; render(true); });
+        ['fDept', 'fSem'].forEach(id => $(id).addEventListener('change', () => render(true)));
+        let st;
+        const onSearch = v => { clearTimeout(st); st = setTimeout(() => { query = v.trim(); render(true); }, 180); };
+        $('search').addEventListener('input', e => { $('topSearch').value = e.target.value; onSearch(e.target.value); });
+        $('topSearch').addEventListener('input', e => { $('search').value = e.target.value; onSearch(e.target.value); });
+        $('viewSeg').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b || b.dataset.v === view) return;
+            view = b.dataset.v; document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('active', x === b)); render(true);
+        });
+
+        async function act(a, code) {
+            const c = courses.find(x => x.code === code); if (!c) return;
+            if (a === 'view') return openDetails(code);
+            if (a === 'edit') return openForm(code);
+            if (a === 'delete') return removeCourses([code]);
+        }
+        async function removeCourses(codes) {
+            const n = codes.length;
+            const enrol = codes.reduce((a, c) => a + enrolled(c).length, 0);
+            const title = n === 1 ? `Delete ${codes[0]}?` : `Delete ${n} courses?`;
+            if (!await ui.confirm(title, `${enrol} enrolled student${enrol === 1 ? '' : 's'} will be removed from ${n === 1 ? 'it' : 'them'} and ${n === 1 ? 'its teacher' : 'their teachers'} will be unassigned. This cannot be undone.`, 'Delete')) return false;
+            courses = courses.filter(c => !codes.includes(c.code));
+            teachers.forEach(t => t.courses = t.courses.filter(x => !codes.includes(x)));
+            students.forEach(s => s.courses = s.courses.filter(x => !codes.includes(x)));
+            live = live.filter(x => !codes.includes(x));
+            codes.forEach(c => selected.delete(c));
+            saveAll(); closeDrawers(); render(false);
+            ui.toast(n === 1 ? `${codes[0]} deleted.` : `${n} courses deleted.`);
+            return true;
+        }
+        $('bulk').addEventListener('click', async e => {
+            const b = e.target.closest('[data-bulk]'); if (!b) return;
+            const codes = [...selected], k = b.dataset.bulk;
+            if (k === 'clear') { selected.clear(); return render(false); }
+            if (k === 'export') return exportCsv(courses.filter(c => selected.has(c.code)), 'selected');
+            if (k === 'delete') return removeCourses(codes);
+            courses.forEach(c => { if (selected.has(c.code)) c.status = k === 'activate' ? 'active' : 'inactive'; });
+            if (k === 'deactivate') live = live.filter(x => !selected.has(x));
+            saveAll(); render(false);
+            ui.toast(`${codes.length} course${codes.length === 1 ? '' : 's'} ${k}d.`, k === 'activate' ? 'success' : 'info');
+        });
+
+        /* ================= ADD / EDIT ================= */
+        let editing = null;   // course code being edited (null = new)
+        function fillSelects(code) {
+            const owner = code ? teacherOf(code) : null;
+            $('fTeacher').innerHTML = '<option value="">— No teacher yet —</option>' + teachers.filter(t => t.status !== 'pending' && t.status !== 'inactive')
+                .map(t => `<option value="${t.id}" ${owner && owner.id === t.id ? 'selected' : ''}>${esc(t.name)} · ${esc(t.dept)}${t.status === 'leave' ? ' (on leave)' : ''}</option>`).join('');
+            $('fZone').innerHTML = zones.filter(z => z.active).map(z => `<option value="${z.id}">${esc(z.name)} · ${z.radius} m</option>`).join('');
+        }
+        function openForm(code, copyFrom) {
+            const c = code ? courses.find(x => x.code === code) : copyFrom || null;
+            editing = code || null;
+            closeDrawers(true);
+            $('formTitle').textContent = code ? `Edit ${code}` : copyFrom ? 'Duplicate Course' : 'New Course';
+            fillSelects(code);
+            const d = c || { code: '', name: '', dept: GA.DEPARTMENTS[0], cr: 3, sem: 1, capacity: 50, days: [], time: '09:00', dur: 90, room: '', zone: 'z1', status: 'active', desc: '' };
+            $('fCode').value = code ? d.code : ''; $('fCode').readOnly = !!code;
+            $('fName').value = d.name; $('fDeptIn').value = d.dept; $('fStatus').value = d.status; $('fCr').value = d.cr; $('fSemIn').value = d.sem;
+            $('fCap').value = d.capacity; $('fTime').value = d.time; $('fDur').value = d.dur; $('fRoom').value = d.room; $('fDesc').value = d.desc || '';
+            $('fZone').value = zones.some(z => z.id === d.zone && z.active) ? d.zone : (zones.find(z => z.active)?.id || '');
+            document.querySelectorAll('#fDays input').forEach(i => i.checked = d.days.includes(+i.value));
+            if (copyFrom) { $('fTeacher').value = ''; $('fDays').querySelectorAll('input').forEach(i => i.checked = false); }
+            document.querySelectorAll('#cForm .invalid').forEach(el => el.classList.remove('invalid'));
+            checkClash();
+            showDrawer('formDrawer');
+            if (window.innerWidth >= 576) setTimeout(() => (code ? $('fName') : $('fCode')).focus(), 300);
+        }
+        function formCourse() {
+            return {
+                code: $('fCode').value.trim().toUpperCase(), name: $('fName').value.trim(), dept: $('fDeptIn').value, status: $('fStatus').value,
+                cr: +$('fCr').value, sem: +$('fSemIn').value, capacity: parseInt($('fCap').value, 10), days: [...document.querySelectorAll('#fDays input:checked')].map(i => +i.value),
+                time: $('fTime').value || '09:00', dur: +$('fDur').value, room: $('fRoom').value.trim(), zone: $('fZone').value, desc: $('fDesc').value.trim()
+            };
+        }
+        // Live warning while editing: same room or same teacher at an overlapping time
+        function findClash(nc, teacherId) {
+            if (!nc.days.length || nc.status !== 'active') return null;
+            const others = courses.filter(c => c.code !== editing && c.status === 'active' && overlap(nc, c));
+            const room = others.find(c => nc.room && c.room.toLowerCase() === nc.room.toLowerCase());
+            if (room) return `${room.room} is already used by ${room.code} on ${nc.days.filter(d => room.days.includes(d)).map(d => DAYN[d]).join('/')} at ${room.time}–${endTime(room)}.`;
+            if (teacherId) {
+                const t = teachers.find(x => x.id === teacherId);
+                const busy = others.find(c => t.courses.includes(c.code));
+                if (busy) return `${t.name} already teaches ${busy.code} at ${busy.time}–${endTime(busy)} on ${nc.days.filter(d => busy.days.includes(d)).map(d => DAYN[d]).join('/')}.`;
+            }
+            return null;
+        }
+        function checkClash() {
+            const msg = findClash(formCourse(), $('fTeacher').value);
+            $('clash').classList.toggle('show', !!msg);
+            $('clash').querySelector('span').textContent = msg || '';
+            return msg;
+        }
+        ['fDays', 'fTime', 'fDur', 'fRoom', 'fTeacher', 'fStatus'].forEach(id => $(id).addEventListener(id === 'fRoom' ? 'input' : 'change', checkClash));
+
+        function saveForm() {
+            document.querySelectorAll('#cForm .invalid').forEach(el => el.classList.remove('invalid'));
+            const nc = formCourse(), teacherId = $('fTeacher').value;
+            const bad = (id, msg) => { $(id).classList.add('invalid'); $(id).focus(); ui.toast(msg, 'error'); };
+            if (!/^[A-Z]{2,3}\d{3}$/.test(nc.code)) return bad('fCode', 'Course code should look like CS301.');
+            if (!editing && courses.some(c => c.code === nc.code)) return bad('fCode', `${nc.code} already exists.`);
+            if (!nc.name) return bad('fName', 'Please enter the course name.');
+            if (!(nc.capacity >= 5 && nc.capacity <= 300)) return bad('fCap', 'Capacity must be between 5 and 300.');
+            if (editing && nc.capacity < enrolled(editing).length) return bad('fCap', `Capacity can't be less than the ${enrolled(editing).length} students already enrolled.`);
+            if (!nc.days.length) { fx.shake($('fDays')); return ui.toast('Choose at least one class day.', 'error'); }
+            if (!nc.room) return bad('fRoom', 'Please enter the room.');
+            const msg = checkClash();
+            if (msg) { fx.shake($('clash')); return ui.toast('Fix the timetable clash first.', 'error'); }
+
+            if (editing) Object.assign(courses.find(c => c.code === editing), nc);
+            else courses.push(nc);
+            // teacher assignment lives on the teacher record (shared with the Teachers page)
+            teachers.forEach(t => { t.courses = t.courses.filter(x => x !== nc.code); });
+            if (teacherId) teachers.find(t => t.id === teacherId).courses.push(nc.code);
+            if (nc.status !== 'active') live = live.filter(x => x !== nc.code);
+            saveAll();
+            const wasEditing = editing;
+            closeDrawers(); render(false);
+            const el = document.querySelector(`[data-row="${nc.code}"]`);
+            if (el) { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); fx.enter([el]); }
+            ui.toast(wasEditing ? `${nc.code} updated.` : `${nc.code} created.`);
+        }
+        $('saveBtn').addEventListener('click', saveForm);
+        $('cForm').addEventListener('submit', e => { e.preventDefault(); saveForm(); });
+        $('addBtn').addEventListener('click', () => openForm(null));
+
+        /* ================= DETAILS ================= */
+        let detailCode = null, detailTab = 'overview';
+        function sessions(c) {
+            const r = GA.rng(GA.hash(c.code + 'sess')), out = [], n = enrolled(c.code).length;
+            if (!n) return out;
+            const base = courseAtt(c.code) / 100, d0 = new Date(); d0.setHours(0, 0, 0, 0);
+            for (let back = 1; back < 60 && out.length < 10; back++) {
+                const day = new Date(d0.getTime() - back * 864e5);
+                if (!c.days.includes(day.getDay())) continue;
+                const p = Math.min(1, Math.max(.4, base + (r() - .5) * .16));
+                const present = Math.round(n * p), late = Math.min(n - present, Math.round(n * r() * .08));
+                out.push({ day, present: present - late, late, absent: n - present, pct: present / n * 100 });
+            }
+            return out;
+        }
+        function openDetails(code, tab) {
+            const c = courses.find(x => x.code === code); if (!c) return;
+            detailCode = code; detailTab = tab || 'overview';
+            closeDrawers(true);
+            const [c1, c2] = colors(c), t = teacherOf(code), list = enrolled(code), a = courseAtt(code), ss = sessions(c);
+            $('dSub').textContent = `${c.code} · ${c.cr} credit hours · Semester ${c.sem}`;
+            const others = students.filter(s => !s.courses.includes(code) && s.status !== 'pending').sort((x, y) => (y.dept === c.dept) - (x.dept === c.dept) || x.name.localeCompare(y.name));
+            $('dBody').innerHTML = `
+                <div class="d-hero" style="--c1:${c1};--c2:${c2}">
+                    <div class="code">${c.code} · ${esc(c.dept).toUpperCase()}</div>
+                    <b>${esc(c.name)}</b>
+                    <small>${sched(c)} · ${esc(c.room)}</small><br>
+                    ${isLive(c) ? '<span class="tag live-tag">Session live now</span>' : `<span class="tag">${c.status === 'active' ? 'Active' : 'Inactive'}</span>`}
+                </div>
+                <div class="p-stats">
+                    <div><b>${list.length}</b><span>Enrolled</span></div>
+                    <div><b>${c.capacity}</b><span>Capacity</span></div>
+                    <div><b style="color:${ringCol(a)}">${a}%</b><span>Attendance</span></div>
+                    <div><b>${ss.length}</b><span>Recent sessions</span></div>
+                </div>
+                <div class="seg p-tabs" id="dTabs">
+                    <button data-t="overview"><i class="bi bi-info-circle"></i> Overview</button>
+                    <button data-t="students"><i class="bi bi-people"></i> Students</button>
+                    <button data-t="sessions"><i class="bi bi-clock-history"></i> Sessions</button>
+                </div>
+                <div class="p-sec" data-sec="overview">
+                    <div class="info-row"><span>Teacher</span><b>${t ? `${esc(t.name)}<br><small class="text-muted">${esc(t.email)}</small>` : '<span class="unassigned"><i class="bi bi-person-x"></i> No teacher assigned</span>'}</b></div>
+                    <div class="info-row"><span>Schedule</span><b>${sched(c)}</b></div>
+                    <div class="info-row"><span>Room</span><b>${esc(c.room)}</b></div>
+                    <div class="info-row"><span>Attendance geofence</span><b><a href="admin_geofences.html">${esc(zoneName(c.zone))} <i class="bi bi-box-arrow-up-right" style="font-size:11px"></i></a></b></div>
+                    <div class="info-row"><span>Department</span><b>${esc(c.dept)}</b></div>
+                    <div class="info-row"><span>Description</span><b style="font-weight:500">${esc(c.desc) || '—'}</b></div>
+                    <div class="mt-3">${enrolBar(c)}</div>
+                </div>
+                <div class="p-sec" data-sec="students">
+                    <div class="add-row">
+                        <select class="f-select" id="enrolSel" aria-label="Student to enrol">
+                            <option value="">Enrol a student…</option>
+                            ${others.map(s => `<option value="${s.id}">${esc(s.name)} · ${esc(s.roll)} · ${esc(s.dept)}</option>`).join('')}
+                        </select>
+                        <button class="btn-primary-grad" id="enrolBtn"><i class="bi bi-person-plus"></i> Enrol</button>
+                    </div>
+                    <input class="f-input mb-2" id="stuSearch" placeholder="Search enrolled students">
+                    <div id="stuList"></div>
+                </div>
+                <div class="p-sec" data-sec="sessions">
+                    ${ss.length ? `
+                        <div class="row-between mb-1"><h6 class="f-label m-0">Last ${ss.length} sessions</h6><small class="text-muted">% present (incl. late)</small></div>
+                        <div class="sess-chart">${[...ss].reverse().map((s, i) => `<div title="${s.day.toDateString()} · ${s.pct.toFixed(0)}%" style="height:${s.pct}%;background:${barCol(s.pct)};animation-delay:${i * 40}ms"></div>`).join('')}</div>
+                        ${ss.map(s => `
+                            <div class="sess-row">
+                                <div class="when">${s.day.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}<small>${s.day.toLocaleDateString('en-GB', { weekday: 'long' })}</small></div>
+                                <div class="pct-cell" style="flex:1"><div class="pct-bar"><span style="width:${s.pct}%;background:${barCol(s.pct)}"></span></div><b>${s.pct.toFixed(0)}%</b></div>
+                                <div class="nums">${s.present} P · ${s.late} L · ${s.absent} A</div>
+                            </div>`).join('')}`
+                    : '<div class="empty py-3"><i class="bi bi-clock-history"></i><b>No sessions yet</b>Sessions appear here once students are enrolled and classes start.</div>'}
+                </div>`;
+            renderStudentList();
+            $('dFoot').innerHTML = `<div class="p-actions w-100">
+                ${c.status === 'active' ? `<button class="${isLive(c) ? 'btn-danger-soft' : 'btn-primary-grad'}" data-d="live"><i class="bi ${isLive(c) ? 'bi-stop-circle' : 'bi-broadcast'}"></i> ${isLive(c) ? 'End session' : 'Start session'}</button>` : '<button class="btn-primary-grad" data-d="toggle"><i class="bi bi-toggle-on"></i> Activate</button>'}
+                <button class="btn-glass" data-d="edit"><i class="bi bi-pencil"></i> Edit</button>
+                <button class="btn-glass" data-d="dup"><i class="bi bi-copy"></i> Duplicate</button>
+                ${c.status === 'active' ? '<button class="btn-glass" data-d="toggle"><i class="bi bi-toggle-off"></i> Deactivate</button>' : ''}
+                <button class="btn-glass" data-d="export"><i class="bi bi-download"></i> Student list</button>
+                <button class="btn-danger-soft" data-d="delete"><i class="bi bi-trash3"></i> Delete</button>
+            </div>`;
+            switchTab(detailTab);
+            showDrawer('detailDrawer');
+        }
+        function switchTab(name) {
+            detailTab = name;
+            document.querySelectorAll('#dTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === name));
+            document.querySelectorAll('#dBody .p-sec').forEach(s => s.classList.toggle('active', s.dataset.sec === name));
+        }
+        function renderStudentList() {
+            const q = ($('stuSearch')?.value || '').toLowerCase();
+            const list = enrolled(detailCode).filter(s => !q || (s.name + ' ' + s.roll).toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+            $('stuList').innerHTML = list.length ? list.map(s => `
+                <div class="stu-row">
+                    <div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                    <div style="min-width:0"><b>${esc(s.name)}</b><small>${esc(s.roll)} · ${esc(s.dept)}</small></div>
+                    <button class="rm" data-unenrol="${s.id}" title="Remove from course" aria-label="Remove ${esc(s.name)}"><i class="bi bi-x-lg"></i></button>
+                </div>`).join('') : `<div class="empty py-3"><i class="bi bi-people"></i><b>${q ? 'No match' : 'No students enrolled'}</b>${q ? 'Try another name.' : 'Use "Enrol a student" above.'}</div>`;
+        }
+
+        $('detailDrawer').addEventListener('input', e => { if (e.target.id === 'stuSearch') renderStudentList(); });
+        $('detailDrawer').addEventListener('click', async e => {
+            const tab = e.target.closest('#dTabs button'); if (tab) return switchTab(tab.dataset.t);
+            const c = courses.find(x => x.code === detailCode); if (!c) return;
+            const un = e.target.closest('[data-unenrol]');
+            if (un) {
+                const s = students.find(x => x.id === un.dataset.unenrol);
+                un.closest('.stu-row').style.cssText = 'transition:all .25s;opacity:0;transform:translateX(30px)';
+                setTimeout(() => { s.courses = s.courses.filter(x => x !== c.code); saveAll(); render(false); openDetails(c.code, 'students'); ui.toast(`${s.name} removed from ${c.code}.`, 'info'); }, 220);
+                return;
+            }
+            if (e.target.closest('#enrolBtn')) {
+                const id = $('enrolSel').value;
+                if (!id) { $('enrolSel').classList.add('invalid'); return ui.toast('Choose a student to enrol.', 'error'); }
+                if (enrolled(c.code).length >= c.capacity) return ui.toast(`${c.code} is full (${c.capacity} students). Increase the capacity first.`, 'error');
+                const s = students.find(x => x.id === id);
+                s.courses.push(c.code); saveAll(); render(false); openDetails(c.code, 'students');
+                ui.toast(`${s.name} enrolled in ${c.code}.`);
+                return;
+            }
+            const b = e.target.closest('[data-d]'); if (!b) return;
+            const k = b.dataset.d;
+            if (k === 'edit') return openForm(c.code);
+            if (k === 'dup') return openForm(null, { ...c, code: '', name: c.name + ' (copy)' });
+            if (k === 'delete') return removeCourses([c.code]);
+            if (k === 'export') return exportStudents(c);
+            if (k === 'toggle') {
+                c.status = c.status === 'active' ? 'inactive' : 'active';
+                if (c.status !== 'active') live = live.filter(x => x !== c.code);
+                saveAll(); render(false); openDetails(c.code); return ui.toast(`${c.code} is now ${c.status}.`, c.status === 'active' ? 'success' : 'info');
+            }
+            if (k === 'live') {
+                const starting = !isLive(c);
+                if (starting && !teacherOf(c.code)) return ui.toast('Assign a teacher before starting a session.', 'error');
+                live = starting ? live.concat(c.code) : live.filter(x => x !== c.code);
+                saveAll(); render(false); openDetails(c.code);
+                ui.toast(starting ? `${c.code} session started — students in ${zoneName(c.zone)} can check in now.` : `${c.code} session ended.`, starting ? 'success' : 'info');
+            }
+        });
+        $('detailDrawer').addEventListener('change', e => { if (e.target.id === 'enrolSel') e.target.classList.remove('invalid'); });
+
+        /* ---------- Drawers ---------- */
+        function showDrawer(id) { $('shade').classList.add('show'); $(id).classList.add('show'); $(id).setAttribute('aria-hidden', 'false'); }
+        function closeDrawers(keepShade) {
+            ['formDrawer', 'detailDrawer'].forEach(id => { $(id).classList.remove('show'); $(id).setAttribute('aria-hidden', 'true'); });
+            if (!keepShade) $('shade').classList.remove('show');
+        }
+        $('shade').addEventListener('click', () => closeDrawers());
+        document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDrawers()));
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || document.querySelector('.modal-bg.show') || document.querySelector('.tb-pop.show')) return;
+            if (document.querySelector('.n-modal.show')) { document.querySelectorAll('.n-modal').forEach(m => m.classList.remove('show')); return; }
+            closeDrawers();
+        });
+
+        /* ================= CSV ================= */
+        function download(name, text) {
+            const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+        const csvLine = arr => arr.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+        const stamp = () => new Date().toISOString().slice(0, 10);
+        function exportCsv(list, label) {
+            if (!list.length) return ui.toast('No courses to export.', 'error');
+            const head = ['Code', 'Name', 'Department', 'Credits', 'Semester', 'Days', 'Start', 'End', 'Room', 'Geofence', 'Teacher', 'Enrolled', 'Capacity', 'Avg Attendance %', 'Status'];
+            const rows = list.map(c => [c.code, c.name, c.dept, c.cr, c.sem, c.days.map(d => DAYN[d]).join(';'), c.time, endTime(c), c.room, zoneName(c.zone), teacherOf(c.code)?.name || '', enrolled(c.code).length, c.capacity, courseAtt(c.code), c.status]);
+            download(`geoattend-courses-${label}-${stamp()}.csv`, [head, ...rows].map(csvLine).join('\r\n'));
+            ui.toast(`${list.length} course${list.length === 1 ? '' : 's'} exported.`);
+        }
+        function exportStudents(c) {
+            const list = enrolled(c.code);
+            if (!list.length) return ui.toast('No students enrolled in this course.', 'error');
+            download(`geoattend-${c.code}-students-${stamp()}.csv`, [['Name', 'Roll No', 'Email', 'Department', 'Semester'], ...list.map(s => [s.name, s.roll, s.email, s.dept, s.sem])].map(csvLine).join('\r\n'));
+            ui.toast(`${list.length} students exported.`);
+        }
+        $('exportBtn').addEventListener('click', () => { exportCsv(filtered(), 'list'); fx.success($('exportBtn'), 'Exported'); });
+        $('importBtn').addEventListener('click', () => $('importModal').classList.add('show'));
+        $('iCancel').addEventListener('click', () => $('importModal').classList.remove('show'));
+        $('importModal').addEventListener('click', e => { if (e.target.id === 'importModal') $('importModal').classList.remove('show'); });
+        $('templateBtn').addEventListener('click', () => download('geoattend-courses-template.csv',
+            [['code', 'name', 'department', 'credits', 'semester', 'capacity', 'days', 'time', 'room'], ['CS420', 'Cloud Computing', 'Computer Science', '3', '7', '50', 'Tue;Thu', '14:00', 'Room B-204']].map(csvLine).join('\r\n')));
+        function parseCsv(text) {
+            const rows = []; let row = [], cell = '', q = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (q) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') q = false; else cell += ch; }
+                else if (ch === '"') q = true;
+                else if (ch === ',') { row.push(cell); cell = ''; }
+                else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+                else cell += ch;
+            }
+            if (cell || row.length) { row.push(cell); rows.push(row); }
+            return rows.filter(r => r.some(v => v.trim()));
+        }
+        function importFile(file) {
+            if (!file) return;
+            if (!/\.csv$/i.test(file.name)) return ui.toast('Please choose a .csv file.', 'error');
+            const reader = new FileReader();
+            reader.onload = () => {
+                const rows = parseCsv(String(reader.result).replace(/^﻿/, ''));
+                if (rows.length < 2) return ui.toast('The file has no course rows.', 'error');
+                const head = rows[0].map(h => h.trim().toLowerCase()), col = n => head.indexOf(n);
+                if (col('code') < 0 || col('name') < 0) return ui.toast('The file needs at least code and name columns.', 'error');
+                let added = 0, skipped = 0;
+                rows.slice(1).forEach(r => {
+                    const g = n => (col(n) >= 0 ? (r[col(n)] || '').trim() : '');
+                    const code = g('code').toUpperCase();
+                    const days = g('days').split(/[;\/\s]+/).map(x => DAYN.indexOf(x.slice(0, 3).replace(/^./, m => m.toUpperCase()))).filter(d => d > 0);
+                    const time = /^\d{1,2}:\d{2}$/.test(g('time')) ? g('time').padStart(5, '0') : '09:00';
+                    if (!/^[A-Z]{2,3}\d{3}$/.test(code) || !g('name') || courses.some(c => c.code === code)) { skipped++; return; }
+                    courses.push({
+                        code, name: g('name'), dept: GA.DEPARTMENTS.includes(g('department')) ? g('department') : GA.DEPARTMENTS[0],
+                        cr: Math.min(4, Math.max(1, parseInt(g('credits')) || 3)), sem: Math.min(8, Math.max(1, parseInt(g('semester')) || 1)),
+                        capacity: Math.min(300, Math.max(5, parseInt(g('capacity')) || 50)), days: days.length ? [...new Set(days)] : [1],
+                        time, dur: 90, room: g('room') || 'TBA', zone: 'z1', status: 'active', desc: ''
+                    });
+                    added++;
+                });
+                saveAll(); $('importModal').classList.remove('show'); status = 'all'; render(true);
+                ui.toast(`${added} course${added === 1 ? '' : 's'} imported${skipped ? `, ${skipped} skipped (bad code, missing name or duplicate)` : ''}.`, added ? 'success' : 'error');
+            };
+            reader.readAsText(file);
+        }
+        $('csvFile').addEventListener('change', e => { importFile(e.target.files[0]); e.target.value = ''; });
+        const drop = $('drop');
+        ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+        ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+        drop.addEventListener('drop', e => importFile(e.dataTransfer.files[0]));
+
+        /* ================= INIT ================= */
+        render(false);
+        fx.enter('.page-head, #stats > div, .main > .panel');
+        document.querySelectorAll('.stat .value').forEach(v => fx.countUp(v));
+        const params = new URLSearchParams(location.search);
+        if (params.get('new') === '1') setTimeout(() => openForm(null), 400);
+        if (params.get('code')) setTimeout(() => openDetails(params.get('code').toUpperCase()), 400);
+    </script>
+</body>
+</html>
