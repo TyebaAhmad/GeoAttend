@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
     <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
 
     <style>
         :root {
@@ -860,6 +861,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
     <script>
         /*
          * DEMO SETTINGS STORE
@@ -926,7 +928,10 @@
                 $('modalCancel').onclick = () => done(false);
             });
         }
-        function initials(name) { return (name || 'A').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(); }
+        function initials(name) {
+            const words = (name || 'Admin').trim().split(/\s+/);
+            return (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
+        }
         function isDirty() { return JSON.stringify(state) !== JSON.stringify(saved); }
         function refreshDirty() { $('saveBar').classList.toggle('show', isDirty()); }
 
@@ -1215,6 +1220,7 @@
         fillFields();
         renderDevices();
         showSection(location.hash.slice(1) || 'general');
+        window.addEventListener('hashchange', () => showSection(location.hash.slice(1) || 'general'));
 
         /* ---------- Motion (assets/fx.js) ---------- */
         fx.enter('.page-head, .settings-nav');
