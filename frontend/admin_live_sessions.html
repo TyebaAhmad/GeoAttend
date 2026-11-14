@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sessions | GeoAttend Admin</title>
+
+    <!-- Demo route guard: only a signed-in admin may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'admin') location.replace('login.html');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        .live-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; color: #047857; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.25); }
+        .live-pill::before, .pulse::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; }
+        .pulse { display: inline-flex; align-items: center; gap: 6px; }
+        .sim { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; color: var(--ink-2); background: rgba(255,255,255,.7); border: 1px solid var(--line); cursor: pointer; user-select: none; }
+
+        /* ---------- Live session cards ---------- */
+        .s-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+        .ls-card {
+            border-radius: 18px; background: rgba(255,255,255,.66); border: 1.5px solid rgba(255,255,255,.95); overflow: hidden;
+            transition: transform .25s, box-shadow .25s; display: flex; flex-direction: column;
+        }
+        .ls-card:hover { transform: translateY(-3px); box-shadow: 0 18px 32px -18px rgba(48,56,120,.5); }
+        .ls-card.ending { border-color: rgba(244,63,94,.45); }
+        .ls-head { padding: 14px 16px 12px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); position: relative; }
+        .ls-head .code { font-size: 12px; font-weight: 800; opacity: .92; display: flex; justify-content: space-between; align-items: center; }
+        .ls-head .lv { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: #047857; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 800; }
+        .ls-head .lv::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; }
+        .ls-head h4 { font-size: 16.5px; font-weight: 800; margin: 3px 0 2px; }
+        .ls-head small { opacity: .92; font-size: 12px; }
+        .ls-body { padding: 14px 16px; display: flex; gap: 14px; align-items: center; }
+        .ring { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; transition: background .5s; }
+        .ring > div { width: 66px; height: 66px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
+        .ring b { font-size: 17px; font-weight: 800; line-height: 1; display: block; }
+        .ring small { font-size: 10px; color: var(--muted); font-weight: 600; }
+        .counts { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .counts div { text-align: center; padding: 6px 2px; border-radius: 12px; background: rgba(27,34,64,.035); }
+        .counts b { display: block; font-size: 16px; font-weight: 800; }
+        .counts span { font-size: 10.5px; color: var(--muted); font-weight: 600; }
+        .timer { padding: 0 16px 12px; }
+        .timer .row-between { font-size: 12px; color: var(--ink-2); }
+        .timer .row-between b { font-variant-numeric: tabular-nums; }
+        .tbar { height: 6px; border-radius: 6px; background: rgba(27,34,64,.07); overflow: hidden; margin-top: 5px; }
+        .tbar span { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #14b8a6, #10b981); transition: width 1s linear; }
+        .ls-card.ending .tbar span { background: linear-gradient(90deg, #fb7185, #f43f5e); }
+        .faces { display: flex; align-items: center; padding: 0 16px 12px; min-height: 34px; }
+        .faces .ini { width: 28px; height: 28px; border-radius: 50%; font-size: 10px; border: 2px solid #fff; margin-left: -6px; }
+        .faces .ini:first-child { margin-left: 0; }
+        .faces .ini.new { animation: fxPop .45s cubic-bezier(.2,1.6,.4,1); }
+        .faces small { margin-left: 8px; font-size: 12px; color: var(--muted); }
+        .ls-foot { display: flex; gap: 6px; padding: 10px 12px 12px; border-top: 1px dashed var(--line); margin-top: auto; }
+        .ls-foot button { flex: 1; padding: 8px 8px; font-size: 12.5px; box-shadow: none; }
+        .flag-dot { color: var(--rose); }
+
+        /* ---------- Feed ---------- */
+        .feed { max-height: 560px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; scrollbar-width: thin; overscroll-behavior: contain; }
+        .fe { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+        .fe:last-child { border-bottom: 0; }
+        .fe.new { animation: feIn .5s cubic-bezier(.2,.8,.3,1); }
+        @keyframes feIn { from { opacity: 0; transform: translateY(-10px); background: rgba(16,185,129,.12); } }
+        .fe .ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; font-size: 15px; }
+        .fe b { color: var(--ink); font-size: 13px; }
+        .fe small { display: block; color: var(--muted); font-size: 12px; }
+        .fe .when { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+        /* ---------- Upcoming / ended ---------- */
+        .up-row, .end-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+        .up-row:last-child, .end-row:last-child { border-bottom: 0; }
+        .up-row .cc, .end-row .cc { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; font-weight: 800; font-size: 11px; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .up-row b, .end-row b { font-size: 13.5px; display: block; }
+        .up-row small, .end-row small { color: var(--muted); font-size: 12px; }
+        .up-row .when { margin-left: auto; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
+        .up-row .when b { color: var(--ink); font-size: 13px; }
+        .up-row button { padding: 7px 12px; font-size: 12.5px; box-shadow: none; }
+        .end-row .pct-cell { width: 130px; flex-shrink: 0; margin-left: auto; }
+
+        /* ---------- Monitor drawer ---------- */
+        .m-hero { padding: 16px; border-radius: 18px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); margin-bottom: 14px; display: flex; gap: 14px; align-items: center; }
+        .m-hero .big { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+        .m-hero small { opacity: .92; font-size: 12px; }
+        .m-hero .grow { flex: 1; min-width: 0; }
+        .m-hero b.t { font-size: 18px; display: block; }
+        #monMap { height: 240px; border-radius: 14px; border: 1px solid var(--glass-border); z-index: 1; }
+        .leaflet-container { font-family: inherit; background: #f4f6fc; }
+        .soft-tiles { filter: saturate(.45) brightness(1.06) contrast(.95); }
+        .qr-box { display: flex; gap: 16px; align-items: center; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.75); border: 1px solid var(--line); margin-top: 14px; }
+        .qr-box #qr { width: 128px; height: 128px; padding: 6px; background: #fff; border-radius: 12px; flex-shrink: 0; display: grid; place-items: center; box-shadow: 0 6px 16px -10px rgba(27,34,64,.5); }
+        .qr-box #qr img, .qr-box #qr canvas { width: 116px !important; height: 116px !important; }
+        .qr-box .tok { font-family: ui-monospace, monospace; font-size: 15px; font-weight: 800; letter-spacing: 2px; color: var(--primary); }
+        .qr-box .qbar { height: 5px; border-radius: 5px; background: rgba(27,34,64,.08); overflow: hidden; margin-top: 8px; }
+        .qr-box .qbar span { display: block; height: 100%; background: var(--primary); transition: width 1s linear; }
+        .m-list .stu { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+        .m-list .stu:last-child { border-bottom: 0; }
+        .m-list .ini { width: 32px; height: 32px; border-radius: 10px; font-size: 11px; }
+        .m-list b { font-size: 13px; color: var(--ink); display: block; }
+        .m-list small { font-size: 12px; color: var(--muted); }
+        .m-list .act { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+        .m-list .act button { padding: 5px 9px; font-size: 11.5px; box-shadow: none; }
+        .m-list .stu.new { animation: feIn .5s ease; }
+        .seg.m-sub { width: 100%; display: flex; margin-bottom: 8px; }
+        .seg.m-sub button { flex: 1; justify-content: center; font-size: 12px; padding: 6px 6px; }
+        .st-present { color: #047857; background: rgba(16,185,129,.12); }
+        .st-late { color: #b45309; background: rgba(245,158,11,.14); }
+        .st-flag { color: #be123c; background: rgba(244,63,94,.10); }
+
+        @media (max-width: 575.98px) {
+            .s-wrap { grid-template-columns: 1fr; }
+            .end-row .pct-cell { width: 90px; }
+            .up-row { flex-wrap: wrap; }
+            .up-row .when { margin-left: 58px; text-align: left; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Smart Attendance System</small></div>
+        </div>
+        <div class="nav-label">Main</div>
+        <ul class="side-nav">
+            <li><a href="admin_dashboard.html"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="admin_students.html"><i class="bi bi-mortarboard"></i> Students</a></li>
+            <li><a href="admin_teachers.html"><i class="bi bi-person-video3"></i> Teachers</a></li>
+            <li><a href="admin_courses.html"><i class="bi bi-journal-bookmark"></i> Courses</a></li>
+        </ul>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="admin_live_sessions.html" class="active"><i class="bi bi-broadcast"></i> Live Sessions <span class="badge-pill" id="navLive" style="background:rgba(255,255,255,.25);color:#fff"></span></a></li>
+            <li><a href="#"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="admin_geofences.html"><i class="bi bi-bullseye"></i> Geofences</a></li>
+            <li><a href="admin_reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="admin_notifications.html"><i class="bi bi-bell"></i> Notifications <span class="badge-pill">5</span></a></li>
+        </ul>
+        <div class="nav-label">System</div>
+        <ul class="side-nav">
+            <li><a href="admin_settings.html"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a href="login.html" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search live sessions by course, teacher or room...">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" onclick="location.href='admin_notifications.html'"><i class="bi bi-bell"></i><span class="dot"></span></button>
+                <div class="profile">
+                    <div class="avatar">AD</div>
+                    <div><b>Admin</b><small>Super Administrator</small></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div>
+                <div class="crumb"><a href="admin_dashboard.html">Dashboard</a> <i class="bi bi-chevron-right" style="font-size:10px"></i> Live Sessions</div>
+                <h2>Live Sessions <span class="live-pill ms-2 align-middle" id="livePill">0 live</span></h2>
+                <p>Watch GPS check-ins arrive in real time, manage open sessions and start new ones.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <label class="sim" title="No backend yet — simulate students checking in"><span class="switch-t sm"><input type="checkbox" id="simToggle" checked><span></span></span> Demo check-ins</label>
+                <button class="btn-primary-grad" id="startBtn"><i class="bi bi-broadcast"></i> Start Session</button>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4" id="stats">
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-broadcast"></i></div><div><div class="label">Live Now</div><div class="value" id="sLive">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-geo-alt-fill"></i></div><div><div class="label">Checked In</div><div class="value" id="sIn">0</div></div></div></div>
+            <div class="col-6 col-md-4 col-xl"><div class="stat glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="stat-icon"><i class="bi bi-hourglass-split"></i></div><div><div class="label">Not Yet</div><div class="value" id="sWaiting">0</div></div></div></div>
+            <div class="col-6 col-md-6 col-xl"><div class="stat glass" style="--tint:#f59e0b;--tint-bg:rgba(245,158,11,.14)"><div class="stat-icon"><i class="bi bi-alarm-fill"></i></div><div><div class="label">Late</div><div class="value" id="sLate">0</div></div></div></div>
+            <div class="col-12 col-md-6 col-xl"><div class="stat glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="stat-icon"><i class="bi bi-shield-exclamation"></i></div><div><div class="label">Flagged Attempts</div><div class="value" id="sFlag">0</div></div></div></div>
+        </div>
+
+        <div class="row g-3 g-xl-4 mb-4">
+            <div class="col-xl-8">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div><h3><i class="bi bi-broadcast"></i> Running Now</h3><p id="runSub">Open attendance sessions</p></div>
+                    </div>
+                    <div id="cards"></div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div><h3><i class="bi bi-activity"></i> Live Activity</h3><p>Check-ins and alerts as they happen</p></div>
+                        <span class="pulse" style="font-size:12px;color:#047857;font-weight:700" id="feedState">Live</span>
+                    </div>
+                    <div class="feed" id="feed"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 g-xl-4">
+            <div class="col-xl-6">
+                <div class="panel glass">
+                    <div class="panel-head"><div><h3><i class="bi bi-calendar-event"></i> <span id="upTitle">Coming Up Today</span></h3><p id="upSub">Scheduled classes that haven't started a session</p></div></div>
+                    <div id="upcoming"></div>
+                </div>
+            </div>
+            <div class="col-xl-6">
+                <div class="panel glass">
+                    <div class="panel-head">
+                        <div><h3><i class="bi bi-check2-all"></i> Ended Today</h3><p>Closed sessions and their final attendance</p></div>
+                        <a href="admin_reports.html" class="link-btn">Full reports</a>
+                    </div>
+                    <div id="ended"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================= MONITOR DRAWER ================= -->
+    <div class="drawer-shade" id="shade"></div>
+    <aside class="drawer glass wide" id="monitor" aria-hidden="true">
+        <div class="drawer-head">
+            <div><h3 id="mTitle">Session</h3><p id="mSub"></p></div>
+            <button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="drawer-body" id="mBody"></div>
+        <div class="drawer-foot" id="mFoot"></div>
+    </aside>
+
+    <!-- ================= START SESSION MODAL ================= -->
+    <div class="n-modal" id="startModal">
+        <div class="box glass">
+            <h4><i class="bi bi-broadcast text-primary"></i> Start Attendance Session</h4>
+            <p>Students enrolled in the course can check in from inside the geofence until the session closes.</p>
+            <div class="field"><label class="f-label" for="stCourse">Course</label><select class="f-select" id="stCourse"></select></div>
+            <div class="row g-2">
+                <div class="col-6 field"><label class="f-label" for="stDur">Open for</label><select class="f-select" id="stDur"><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option></select></div>
+                <div class="col-6 field"><label class="f-label" for="stLate">Late after</label><select class="f-select" id="stLate"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></div>
+            </div>
+            <div class="field"><label class="f-label" for="stZone">Geofence</label><select class="f-select" id="stZone"></select></div>
+            <div class="field row-between">
+                <div><b style="font-size:13.5px">Require QR code</b><div class="f-help mt-0">Students also scan a rotating QR shown in class.</div></div>
+                <label class="switch-t"><input type="checkbox" id="stQr"><span></span></label>
+            </div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn-glass" id="stCancel">Cancel</button>
+                <button class="btn-primary-grad" id="stGo"><i class="bi bi-broadcast"></i> Start now</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="assets/data.js"></script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * LIVE SESSIONS
+         * No backend yet: open sessions are kept in localStorage ("ga_sessions", plus "ga_live" = their course codes so
+         * Courses/Teachers/Geofences see the same live list) and ended ones in "ga_sessions_ended".
+         * "Demo check-ins" simulates students checking in. Later the backend will push real check-ins (e.g. WebSocket).
+         */
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const S = GA.settings();
+        const DEF_DUR = S.sessionDuration || 15, DEF_LATE = S.lateAfter ?? 10, AUTO_CLOSE = S.autoClose !== false;
+        const QR_INT = +(S.qrInterval || 15) * 1000;
+        const MIN = 60000;
+        const DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const DEPT_COLORS = {
+            'Computer Science': ['#4338ca', '#6d5ce8'], 'Software Engineering': ['#0d9488', '#14b8a6'], 'Artificial Intelligence': ['#7c3aed', '#a855f7'],
+            'Information Technology': ['#0369a1', '#0ea5e9'], 'Electrical Engineering': ['#c2410c', '#f59e0b'], 'Mathematics': ['#be123c', '#f43f5e']
+        };
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+        const FLAGS = ['Outside the geofence', 'Mock location app detected', 'GPS accuracy too low', 'Unregistered device'];
+
+        const courses = GA.loadCourses();
+        const COURSE = Object.fromEntries(courses.map(c => [c.code, c]));
+        const teachers = GA.loadTeachers();
+        const students = GA.loadStudents();
+        const zones = GA.loadZones();
+
+        const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
+        const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+        /* ---------- Helpers ---------- */
+        const teacherOf = code => teachers.find(t => t.courses.includes(code));
+        const zoneOf = s => zones.find(z => z.id === s.zone) || zones[0];
+        const enrolled = code => students.filter(st => st.courses.includes(code) && st.status === 'active');
+        const colors = code => DEPT_COLORS[COURSE[code]?.dept] || ['#4338ca', '#6d5ce8'];
+        const initials = n => n.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, '').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const pcolor = id => PALETTE[GA.hash(id) % PALETTE.length];
+        const stu = id => students.find(s => s.id === id);
+        const clock = t => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        const ago = t => { const d = Date.now() - t; return d < MIN ? 'just now' : d < 60 * MIN ? Math.floor(d / MIN) + ' min ago' : clock(t); };
+        const endsAt = s => s.startedAt + s.duration * MIN;
+        const statusFor = (s, at) => (at - s.startedAt) > s.lateAfter * MIN ? 'late' : 'present';
+
+        /* ---------- Sessions store ---------- */
+        function newSession(code, o = {}) {
+            const c = COURSE[code];
+            return { id: 'ls' + Date.now() + Math.floor(Math.random() * 1000), code, zone: o.zone || c?.zone || 'z1', startedAt: o.startedAt || Date.now(),
+                duration: o.duration || DEF_DUR, lateAfter: o.lateAfter ?? DEF_LATE, qr: o.qr ?? !!S.qrVerify, checkins: [], flags: [] };
+        }
+        // sample sessions that started a few minutes ago, with some students already checked in
+        function sampleSession(code, i) {
+            const s = newSession(code, { startedAt: Date.now() - (2 + i * 2.5) * MIN, qr: code === 'CS301' });
+            const r = GA.rng(GA.hash(code + 'live'));
+            const list = enrolled(code), elapsed = Date.now() - s.startedAt;
+            list.forEach(st => {
+                if (r() > Math.min(.85, elapsed / (s.duration * MIN) + .25)) return;
+                const at = s.startedAt + r() * elapsed;
+                s.checkins.push({ sid: st.id, at, status: statusFor(s, at), dist: Math.round(4 + r() * (zoneOf(s).radius * .85)), acc: Math.round(5 + r() * 20) });
+            });
+            if (r() < .6 && list.length) s.flags.push({ sid: list[Math.floor(r() * list.length)].id, at: s.startedAt + r() * elapsed, reason: FLAGS[Math.floor(r() * FLAGS.length)], dist: Math.round(zoneOf(s).radius + 20 + r() * 80) });
+            return s;
+        }
+        function load() {
+            const liveCodes = GA.liveCodes();
+            let list = read('ga_sessions', null);
+            if (!Array.isArray(list)) list = liveCodes.filter(c => COURSE[c]).map(sampleSession);
+            // keep in step with sessions started/ended on other pages (Courses)
+            list = list.filter(s => liveCodes.includes(s.code) && COURSE[s.code]);
+            liveCodes.forEach(c => { if (COURSE[c] && !list.some(s => s.code === c)) list.push(newSession(c)); });
+            return list;
+        }
+        function loadEnded() {
+            let e = read('ga_sessions_ended', null);
+            const today = new Date().toDateString();
+            if (!Array.isArray(e)) {
+                // two sample sessions that closed earlier today
+                e = ['CS205', 'IT220'].filter(c => COURSE[c]).map((code, i) => {
+                    const n = enrolled(code).length, p = Math.round(n * (.78 + i * .08)), l = Math.min(n - p, 1 + i);
+                    return { code, startedAt: Date.now() - (150 - i * 50) * MIN, endedAt: Date.now() - (135 - i * 50) * MIN, present: p - l, late: l, absent: n - p, flags: i };
+                });
+            }
+            return e.filter(x => new Date(x.endedAt).toDateString() === today);
+        }
+        let sessions = load();
+        let ended = loadEnded();
+        function persist() { write('ga_sessions', sessions); write('ga_sessions_ended', ended); GA.saveLive(sessions.map(s => s.code)); }
+        persist();
+
+        /* ---------- Feed (newest first) ---------- */
+        let feed = [];
+        function seedFeed() {
+            sessions.forEach(s => {
+                s.checkins.forEach(c => feed.push({ type: c.status, code: s.code, sid: c.sid, at: c.at, dist: c.dist, manual: c.manual }));
+                s.flags.forEach(f => feed.push({ type: 'flag', code: s.code, sid: f.sid, at: f.at, reason: f.reason, dist: f.dist }));
+            });
+            feed.sort((a, b) => b.at - a.at); feed = feed.slice(0, 40);
+        }
+        seedFeed();
+        function feedHtml(f, isNew) {
+            const st = stu(f.sid); if (!st) return '';
+            const IC = { present: ['bi-geo-alt-fill', '#10b981', 'rgba(16,185,129,.12)', 'checked in'], late: ['bi-alarm', '#f59e0b', 'rgba(245,158,11,.14)', 'checked in late'],
+                flag: ['bi-shield-exclamation', '#f43f5e', 'rgba(244,63,94,.1)', 'was blocked'], start: ['bi-broadcast', '#4338ca', 'rgba(67,56,202,.1)', ''], end: ['bi-stop-circle', '#64748b', 'rgba(100,116,139,.12)', ''] };
+            const [ic, col, bg, verb] = IC[f.type];
+            const detail = f.type === 'flag' ? `${f.reason} · ${f.dist} m away` : `${f.manual ? 'Marked by admin' : f.dist + ' m from centre'} · ${COURSE[f.code]?.room || ''}`;
+            return `<div class="fe ${isNew ? 'new' : ''}"><div class="ic" style="color:${col};background:${bg}"><i class="bi ${ic}"></i></div>
+                <div style="min-width:0"><b>${esc(st.name)}</b> ${verb} <b>${f.code}</b><small>${esc(detail)}</small></div><div class="when" data-ago="${f.at}">${ago(f.at)}</div></div>`;
+        }
+        function sysFeed(text, sub, type) { return `<div class="fe new"><div class="ic" style="color:${type === 'end' ? '#64748b' : '#4338ca'};background:${type === 'end' ? 'rgba(100,116,139,.12)' : 'rgba(67,56,202,.1)'}"><i class="bi ${type === 'end' ? 'bi-stop-circle' : 'bi-broadcast'}"></i></div><div style="min-width:0"><b>${esc(text)}</b><small>${esc(sub)}</small></div><div class="when" data-ago="${Date.now()}">just now</div></div>`; }
+        function renderFeed() {
+            $('feed').innerHTML = feed.length ? feed.map(f => feedHtml(f)).join('') : '<div class="empty py-4"><i class="bi bi-activity"></i><b>Quiet for now</b>Check-ins will appear here.</div>';
+        }
+        function pushFeed(f) {
+            feed.unshift(f); feed = feed.slice(0, 40);
+            const box = $('feed');
+            if (box.querySelector('.empty')) box.innerHTML = '';
+            box.insertAdjacentHTML('afterbegin', feedHtml(f, true));
+            while (box.children.length > 40) box.lastElementChild.remove();
+        }
+
+        /* ---------- Stats ---------- */
+        function setStat(id, v) { const el = $(id); if (el.textContent !== String(v)) { const first = el.dataset.init !== '1'; el.textContent = v; el.dataset.init = '1'; if (!first) fx.bump(el); } }
+        function renderStats() {
+            const inN = sessions.reduce((a, s) => a + s.checkins.length, 0);
+            const total = sessions.reduce((a, s) => a + enrolled(s.code).length, 0);
+            setStat('sLive', sessions.length);
+            setStat('sIn', inN);
+            setStat('sWaiting', Math.max(0, total - inN));
+            setStat('sLate', sessions.reduce((a, s) => a + s.checkins.filter(c => c.status === 'late').length, 0));
+            setStat('sFlag', sessions.reduce((a, s) => a + s.flags.length, 0));
+            $('livePill').textContent = `${sessions.length} live`;
+            $('livePill').style.display = sessions.length ? '' : 'none';
+            $('navLive').textContent = sessions.length || '';
+            $('navLive').style.display = sessions.length ? '' : 'none';
+        }
+
+        /* ---------- Session cards ---------- */
+        let query = '';
+        function cardInner(s) {
+            const c = COURSE[s.code], t = teacherOf(s.code), n = enrolled(s.code).length, k = s.checkins.length, p = n ? Math.round(k / n * 100) : 0;
+            const late = s.checkins.filter(x => x.status === 'late').length;
+            const recent = [...s.checkins].sort((a, b) => b.at - a.at).slice(0, 6);
+            return `
+                <div class="ls-head">
+                    <div class="code"><span>${s.code} · ${esc(c.room)}</span><span class="lv" data-elapsed="${s.id}">LIVE</span></div>
+                    <h4>${esc(c.name)}</h4>
+                    <small>${t ? esc(t.name) : 'No teacher'} · ${esc(zoneOf(s).name)}${s.qr ? ' · <i class="bi bi-qr-code"></i> QR' : ''}</small>
+                </div>
+                <div class="ls-body">
+                    <div class="ring" style="background:conic-gradient(#10b981 ${p}%, rgba(27,34,64,.08) 0)"><div><div><b>${k}/${n}</b><small>${p}% in</small></div></div></div>
+                    <div class="counts">
+                        <div><b style="color:#047857">${k - late}</b><span>On time</span></div>
+                        <div><b style="color:#b45309">${late}</b><span>Late</span></div>
+                        <div><b class="${s.flags.length ? 'flag-dot' : ''}">${s.flags.length}</b><span>Flagged</span></div>
+                    </div>
+                </div>
+                <div class="timer">
+                    <div class="row-between"><span>Closes at ${clock(endsAt(s))}</span><b data-left="${s.id}">${mmss(endsAt(s) - Date.now())} left</b></div>
+                    <div class="tbar"><span data-bar="${s.id}" style="width:${Math.max(0, Math.min(100, (endsAt(s) - Date.now()) / (s.duration * MIN) * 100))}%"></span></div>
+                </div>
+                <div class="faces">${recent.map(x => { const st = stu(x.sid); return st ? `<div class="ini" style="background:${pcolor(st.id)}" title="${esc(st.name)}">${initials(st.name)}</div>` : ''; }).join('')}
+                    <small>${k ? 'latest check-ins' : 'Waiting for the first check-in…'}</small></div>
+                <div class="ls-foot">
+                    <button class="btn-primary-grad" data-mon="${s.id}"><i class="bi bi-display"></i> Monitor</button>
+                    <button class="btn-glass" data-ext="${s.id}" title="Keep the session open 5 more minutes"><i class="bi bi-plus-circle"></i> 5 min</button>
+                    <button class="btn-danger-soft" data-end="${s.id}"><i class="bi bi-stop-circle"></i> End</button>
+                </div>`;
+        }
+        function visibleSessions() {
+            const q = query.toLowerCase();
+            return sessions.filter(s => !q || [s.code, COURSE[s.code].name, COURSE[s.code].room, teacherOf(s.code)?.name || ''].join(' ').toLowerCase().includes(q))
+                .sort((a, b) => endsAt(a) - endsAt(b));
+        }
+        function renderCards(animate) {
+            const list = visibleSessions();
+            $('runSub').textContent = sessions.length ? `${sessions.length} open session${sessions.length === 1 ? '' : 's'} · auto-close ${AUTO_CLOSE ? 'on' : 'off'}` : 'No open sessions';
+            $('cards').innerHTML = list.length ? `<div class="s-wrap">${list.map(s => {
+                const [c1, c2] = colors(s.code);
+                return `<div class="ls-card ${endsAt(s) - Date.now() < 2 * MIN ? 'ending' : ''}" data-card="${s.id}" style="--c1:${c1};--c2:${c2}">${cardInner(s)}</div>`;
+            }).join('')}</div>` : `<div class="empty"><i class="bi bi-broadcast"></i><b>${query ? 'No matching sessions' : 'No sessions running'}</b>${query ? 'Try another search.' : 'Start a session from "Coming up" or the Start Session button.'}</div>`;
+            if (animate) fx.enter('#cards .ls-card');
+        }
+        // update one card in place (no flicker, no re-animation)
+        function updateCard(s) {
+            const el = document.querySelector(`[data-card="${s.id}"]`);
+            if (!el) return;
+            const before = el.querySelectorAll('.faces .ini').length;
+            el.innerHTML = cardInner(s);
+            const first = el.querySelector('.faces .ini');
+            if (first && s.checkins.length) first.classList.add('new');
+            fx.bump(el.querySelector('.ring b'));
+        }
+        $('cards').addEventListener('click', e => {
+            const m = e.target.closest('[data-mon]'); if (m) return openMonitor(m.dataset.mon);
+            const x = e.target.closest('[data-ext]'); if (x) return extend(x.dataset.ext);
+            const en = e.target.closest('[data-end]'); if (en) return endSession(en.dataset.end);
+        });
+
+        function extend(id, mins = 5) {
+            const s = sessions.find(x => x.id === id); if (!s) return;
+            if (endsAt(s) < Date.now()) s.duration = Math.ceil((Date.now() - s.startedAt) / MIN);
+            s.duration += mins; persist(); updateCard(s);
+            if (monitorId === id) renderMonitor();
+            ui.toast(`${s.code} extended — now closes at ${clock(endsAt(s))}.`);
+        }
+        async function endSession(id, auto) {
+            const s = sessions.find(x => x.id === id); if (!s) return;
+            const n = enrolled(s.code).length, k = s.checkins.length, late = s.checkins.filter(c => c.status === 'late').length;
+            if (!auto && !await ui.confirm(`End ${s.code} session?`, `${k} of ${n} students checked in (${late} late). The other ${n - k} will be marked absent.`, 'End session')) return;
+            sessions = sessions.filter(x => x.id !== id);
+            ended.unshift({ code: s.code, startedAt: s.startedAt, endedAt: Date.now(), present: k - late, late, absent: n - k, flags: s.flags.length });
+            persist();
+            if (monitorId === id) closeMonitor();
+            $('feed').insertAdjacentHTML('afterbegin', sysFeed(`${s.code} session ${auto ? 'closed automatically' : 'ended'}`, `${k}/${n} checked in · ${n - k} marked absent`, 'end'));
+            renderStats(); renderCards(false); renderUpcoming(); renderEnded(true);
+            ui.toast(`${s.code} session ${auto ? 'closed automatically' : 'ended'} — ${k}/${n} present.`, 'info');
+        }
+
+        /* ---------- Upcoming & ended ---------- */
+        function renderUpcoming() {
+            const now = new Date(), today = now.getDay(), nowMin = now.getHours() * 60 + now.getMinutes();
+            const liveSet = new Set(sessions.map(s => s.code)), doneSet = new Set(ended.map(e => e.code));
+            let day = today, list = [];
+            for (let i = 0; i < 7 && !list.length; i++) {
+                day = (today + i) % 7;
+                // today: skip classes already live or finished; another day: show the full schedule
+                list = courses.filter(c => c.status === 'active' && c.days.includes(day) && (i > 0 || (!liveSet.has(c.code) && !doneSet.has(c.code))))
+                    .filter(c => { if (i > 0) return true; const [h, m] = c.time.split(':').map(Number); return h * 60 + m + c.dur > nowMin; })
+                    .sort((a, b) => a.time.localeCompare(b.time));
+                if (list.length) { $('upTitle').textContent = i === 0 ? 'Coming Up Today' : i === 1 ? 'Coming Up Tomorrow' : `Next Classes · ${DAYN[day]}`; $('upSub').textContent = i === 0 ? 'Scheduled classes that haven\'t started a session' : 'No more classes today — here\'s the next class day'; }
+            }
+            $('upcoming').innerHTML = list.length ? list.map(c => {
+                const [c1, c2] = colors(c.code), t = teacherOf(c.code), [h, m] = c.time.split(':').map(Number), mins = h * 60 + m - nowMin;
+                const when = day !== today ? DAYN[day] : mins > 0 ? `in ${mins >= 60 ? Math.floor(mins / 60) + ' h ' : ''}${mins % 60} min` : 'now';
+                return `<div class="up-row" style="--c1:${c1};--c2:${c2}"><div class="cc">${c.code}</div>
+                    <div style="min-width:0"><b>${esc(c.name)}</b><small>${t ? esc(t.name) : '<span style="color:#be123c">No teacher</span>'} · ${esc(c.room)}</small></div>
+                    <div class="when"><b>${c.time}</b><br>${when}</div>
+                    ${day === today ? `<button class="btn-glass" data-quick="${c.code}"><i class="bi bi-broadcast"></i> Start</button>` : ''}</div>`;
+            }).join('') : '<div class="empty py-4"><i class="bi bi-calendar-check"></i><b>Nothing scheduled</b>No upcoming classes this week.</div>';
+        }
+        $('upcoming').addEventListener('click', e => { const b = e.target.closest('[data-quick]'); if (b) openStart(b.dataset.quick); });
+        function renderEnded(animate) {
+            $('ended').innerHTML = ended.length ? ended.map(e => {
+                const [c1, c2] = colors(e.code), n = e.present + e.late + e.absent, p = n ? Math.round((e.present + e.late) / n * 100) : 0;
+                const col = p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= (S.minAttendance || 75) ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+                return `<div class="end-row" style="--c1:${c1};--c2:${c2}"><div class="cc">${e.code}</div>
+                    <div style="min-width:0"><b>${esc(COURSE[e.code]?.name || e.code)}</b><small>${clock(e.startedAt)}–${clock(e.endedAt)} · ${e.present} on time · ${e.late} late · ${e.absent} absent${e.flags ? ` · ${e.flags} flagged` : ''}</small></div>
+                    <div class="pct-cell"><div class="pct-bar"><span style="width:${p}%;background:${col}"></span></div><b>${p}%</b></div></div>`;
+            }).join('') : '<div class="empty py-4"><i class="bi bi-clock-history"></i><b>No sessions ended today</b>Closed sessions will be summarised here.</div>';
+            if (animate) fx.enter([$('ended').firstElementChild].filter(Boolean));
+        }
+
+        /* ================= MONITOR ================= */
+        let monitorId = null, monTab = 'in', monMap = null, monLayers = null, qrTimer = null, qrObj = null;
+        function openMonitor(id) {
+            monitorId = id; monTab = 'in';
+            renderMonitor(true);
+            $('shade').classList.add('show'); $('monitor').classList.add('show'); $('monitor').setAttribute('aria-hidden', 'false');
+            setTimeout(() => monMap && monMap.invalidateSize(), 380);
+        }
+        function closeMonitor() {
+            monitorId = null; clearInterval(qrTimer);
+            $('shade').classList.remove('show'); $('monitor').classList.remove('show'); $('monitor').setAttribute('aria-hidden', 'true');
+        }
+        // place a check-in dot: distance from the centre + a fixed angle per student
+        function offset(z, dist, seed) {
+            const ang = (GA.hash(seed) % 360) * Math.PI / 180;
+            return [z.lat + (dist * Math.cos(ang)) / 111320, z.lng + (dist * Math.sin(ang)) / (111320 * Math.cos(z.lat * Math.PI / 180))];
+        }
+        function renderMonitor(full) {
+            const s = sessions.find(x => x.id === monitorId); if (!s) return closeMonitor();
+            const c = COURSE[s.code], z = zoneOf(s), t = teacherOf(s.code), [c1, c2] = colors(s.code);
+            const list = enrolled(s.code), inIds = new Set(s.checkins.map(x => x.sid)), late = s.checkins.filter(x => x.status === 'late').length;
+            $('mTitle').textContent = `${s.code} · ${c.name}`;
+            $('mSub').textContent = `${t ? t.name : 'No teacher'} · ${c.room} · started ${clock(s.startedAt)}`;
+            if (full) {
+                $('mBody').innerHTML = `
+                    <div class="m-hero" style="--c1:${c1};--c2:${c2}">
+                        <div class="grow"><small>Closes in</small><div class="big" id="mLeft">${mmss(endsAt(s) - Date.now())}</div><small>at ${clock(endsAt(s))} · late after ${s.lateAfter} min</small></div>
+                        <div class="text-end"><b class="t" id="mCount">${s.checkins.length}/${list.length}</b><small>checked in</small></div>
+                    </div>
+                    <div class="p-stats" id="mStats"></div>
+                    <div id="monMap"></div>
+                    <div class="f-help mt-1"><i class="bi bi-circle-fill" style="color:#10b981;font-size:8px"></i> on time &nbsp; <i class="bi bi-circle-fill" style="color:#f59e0b;font-size:8px"></i> late &nbsp; <i class="bi bi-x-circle-fill" style="color:#f43f5e;font-size:9px"></i> blocked attempt · ${esc(z.name)} (${z.radius} m)</div>
+                    ${s.qr ? `<div class="qr-box"><div id="qr"></div><div style="min-width:0;flex:1"><b style="font-size:14px">Classroom QR code</b><div class="f-help mt-0 mb-1">Show this on the projector. It changes every ${QR_INT / 1000} s so it can't be shared.</div><div class="tok" id="qrTok"></div><div class="qbar"><span id="qrBar"></span></div></div></div>` : ''}
+                    <div class="seg m-sub mt-3" id="mTabs">
+                        <button data-t="in">Checked in <span class="cnt" id="cIn"></span></button>
+                        <button data-t="out">Not yet <span class="cnt" id="cOut"></span></button>
+                        <button data-t="flag">Flagged <span class="cnt" id="cFlag"></span></button>
+                    </div>
+                    <div class="m-list" id="mList"></div>`;
+                initMap(s, z);
+                if (s.qr) startQr(s);
+            }
+            $('mCount').textContent = `${s.checkins.length}/${list.length}`;
+            $('mStats').innerHTML = `
+                <div><b style="color:#047857">${s.checkins.length - late}</b><span>On time</span></div>
+                <div><b style="color:#b45309">${late}</b><span>Late</span></div>
+                <div><b>${list.length - s.checkins.length}</b><span>Not yet</span></div>
+                <div><b style="color:${s.flags.length ? '#f43f5e' : 'inherit'}">${s.flags.length}</b><span>Flagged</span></div>`;
+            $('cIn').textContent = s.checkins.length; $('cOut').textContent = list.length - s.checkins.length; $('cFlag').textContent = s.flags.length;
+            document.querySelectorAll('#mTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === monTab));
+            renderMonList(s, list, inIds);
+            drawDots(s, z);
+            $('mFoot').innerHTML = `<div class="p-actions w-100" style="grid-template-columns:repeat(3,1fr)">
+                <button class="btn-glass" data-m="remind"${list.length - s.checkins.length ? '' : ' disabled'}><i class="bi bi-bell"></i> Remind (${list.length - s.checkins.length})</button>
+                <button class="btn-glass" data-m="extend"><i class="bi bi-plus-circle"></i> +5 min</button>
+                <button class="btn-danger-soft" data-m="end"><i class="bi bi-stop-circle"></i> End session</button></div>`;
+        }
+        function renderMonList(s, list, inIds) {
+            let html = '';
+            if (monTab === 'in') {
+                const rows = [...s.checkins].sort((a, b) => b.at - a.at);
+                html = rows.length ? rows.map(x => { const st = stu(x.sid); if (!st) return ''; return `
+                    <div class="stu"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                    <div style="min-width:0"><b>${esc(st.name)} <span class="tag ${x.status === 'late' ? 'st-late' : 'st-present'}">${x.status === 'late' ? 'Late' : 'On time'}</span></b>
+                    <small>${clock(x.at)} · ${x.manual ? 'marked by admin' : `${x.dist} m from centre · ±${x.acc} m GPS`}</small></div>
+                    <div class="act"><button class="btn-glass" data-undo="${st.id}" title="Remove check-in (mark absent)">Undo</button></div></div>`; }).join('')
+                    : '<div class="empty py-3"><i class="bi bi-hourglass"></i><b>No check-ins yet</b>Students will appear here as they arrive.</div>';
+            } else if (monTab === 'out') {
+                const rows = list.filter(st => !inIds.has(st.id)).sort((a, b) => a.name.localeCompare(b.name));
+                html = rows.length ? rows.map(st => `
+                    <div class="stu"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                    <div style="min-width:0"><b>${esc(st.name)}</b><small>${esc(st.roll)}${st.device ? '' : ' · no device bound'}</small></div>
+                    <div class="act"><button class="btn-glass" data-mark="present" data-sid="${st.id}" title="Mark present manually">Present</button><button class="btn-glass" data-mark="late" data-sid="${st.id}">Late</button></div></div>`).join('')
+                    : '<div class="empty py-3"><i class="bi bi-emoji-smile"></i><b>Everyone is here</b>All enrolled students have checked in.</div>';
+            } else {
+                html = s.flags.length ? [...s.flags].sort((a, b) => b.at - a.at).map(f => { const st = stu(f.sid); if (!st) return ''; return `
+                    <div class="stu"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                    <div style="min-width:0"><b>${esc(st.name)} <span class="tag st-flag">${esc(f.reason)}</span></b><small>${clock(f.at)} · ${f.dist} m from centre · check-in blocked</small></div>
+                    <div class="act">${inIds.has(st.id) ? '' : `<button class="btn-glass" data-mark="present" data-sid="${st.id}" title="Override: the student is really in class">Allow</button>`}</div></div>`; }).join('')
+                    : '<div class="empty py-3"><i class="bi bi-shield-check"></i><b>No suspicious attempts</b>Blocked check-ins (fake GPS, outside the zone…) show up here.</div>';
+            }
+            $('mList').innerHTML = html;
+        }
+        function initMap(s, z) {
+            if (monMap) { monMap.remove(); monMap = null; }
+            monMap = L.map('monMap', { scrollWheelZoom: false, zoomControl: false, attributionControl: false }).setView([z.lat, z.lng], z.radius > 150 ? 16 : 18);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'soft-tiles' }).addTo(monMap);
+            L.circle([z.lat, z.lng], { radius: z.radius, color: '#4338ca', weight: 2, fillColor: '#4338ca', fillOpacity: .12 }).addTo(monMap);
+            monLayers = L.layerGroup().addTo(monMap);
+        }
+        function drawDots(s, z) {
+            if (!monLayers) return;
+            monLayers.clearLayers();
+            s.checkins.forEach(x => { if (x.manual) return; L.circleMarker(offset(z, x.dist, x.sid), { radius: 6, color: '#fff', weight: 2, fillColor: x.status === 'late' ? '#f59e0b' : '#10b981', fillOpacity: 1 }).bindTooltip(stu(x.sid)?.name || '').addTo(monLayers); });
+            s.flags.forEach(f => L.circleMarker(offset(z, f.dist, f.sid + 'f'), { radius: 6, color: '#fff', weight: 2, fillColor: '#f43f5e', fillOpacity: 1 }).bindTooltip(`${stu(f.sid)?.name || ''} — ${f.reason}`).addTo(monLayers));
+        }
+        function startQr(s) {
+            clearInterval(qrTimer);
+            const draw = () => {
+                const slot = Math.floor(Date.now() / QR_INT);
+                const tok = (GA.hash(s.id + slot).toString(36).toUpperCase() + 'XXXXXX').slice(0, 6);
+                $('qrTok').textContent = tok.replace(/(...)/, '$1 ');
+                if (window.QRCode) {
+                    if (!qrObj || !document.getElementById('qr').firstChild) { $('qr').innerHTML = ''; qrObj = new QRCode($('qr'), { text: `GEOATTEND:${s.id}:${tok}`, width: 116, height: 116, correctLevel: QRCode.CorrectLevel.M }); }
+                    else qrObj.makeCode(`GEOATTEND:${s.id}:${tok}`);
+                } else $('qr').textContent = tok;
+            };
+            qrObj = null; draw();
+            let last = Math.floor(Date.now() / QR_INT);
+            qrTimer = setInterval(() => {
+                if (!$('qrBar')) return clearInterval(qrTimer);
+                const now = Math.floor(Date.now() / QR_INT);
+                if (now !== last) { last = now; draw(); }
+                $('qrBar').style.width = (100 - (Date.now() % QR_INT) / QR_INT * 100) + '%';
+            }, 1000);
+        }
+
+        $('monitor').addEventListener('click', async e => {
+            const s = sessions.find(x => x.id === monitorId); if (!s) return;
+            const tab = e.target.closest('#mTabs button');
+            if (tab) { monTab = tab.dataset.t; return renderMonitor(); }
+            const mk = e.target.closest('[data-mark]');
+            if (mk) {
+                const st = stu(mk.dataset.sid);
+                if (s.checkins.some(x => x.sid === st.id)) return;
+                const at = Date.now();
+                s.checkins.push({ sid: st.id, at, status: mk.dataset.mark, dist: 0, acc: 0, manual: true });
+                persist(); renderMonitor(); updateCard(s); renderStats();
+                pushFeed({ type: mk.dataset.mark, code: s.code, sid: st.id, at, manual: true });
+                return ui.toast(`${st.name} marked ${mk.dataset.mark === 'late' ? 'late' : 'present'} manually.`);
+            }
+            const un = e.target.closest('[data-undo]');
+            if (un) {
+                const st = stu(un.dataset.undo);
+                s.checkins = s.checkins.filter(x => x.sid !== st.id);
+                persist(); renderMonitor(); updateCard(s); renderStats();
+                return ui.toast(`${st.name}'s check-in removed.`, 'info');
+            }
+            const b = e.target.closest('[data-m]'); if (!b) return;
+            if (b.dataset.m === 'extend') return extend(s.id);
+            if (b.dataset.m === 'end') return endSession(s.id);
+            if (b.dataset.m === 'remind') {
+                const waiting = enrolled(s.code).filter(st => !s.checkins.some(x => x.sid === st.id));
+                try {
+                    const d = JSON.parse(localStorage.getItem('ga_notifications'));
+                    if (d && Array.isArray(d.sent)) { d.sent.push({ id: Date.now(), type: 'reminder', title: `${s.code} attendance closing soon`, msg: `Check in now — the session closes at ${clock(endsAt(s))}.`, audience: 'custom', audienceLabel: `${waiting.length} ${s.code} students`, channels: ['app', 'push'], at: Date.now() }); localStorage.setItem('ga_notifications', JSON.stringify(d)); }
+                } catch {}
+                fx.success(b, 'Sent');
+                ui.toast(`Reminder sent to ${waiting.length} student${waiting.length === 1 ? '' : 's'} who haven't checked in.`);
+            }
+        });
+        $('shade').addEventListener('click', closeMonitor);
+        document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeMonitor));
+
+        /* ================= START SESSION ================= */
+        function openStart(code) {
+            const liveSet = new Set(sessions.map(s => s.code));
+            const avail = courses.filter(c => c.status === 'active' && !liveSet.has(c.code));
+            if (!avail.length) return ui.toast('Every active course already has a live session.', 'info');
+            $('stCourse').innerHTML = avail.map(c => `<option value="${c.code}" ${c.code === code ? 'selected' : ''}>${c.code} · ${esc(c.name)}${teacherOf(c.code) ? '' : ' (no teacher)'}</option>`).join('');
+            $('stZone').innerHTML = zones.filter(z => z.active).map(z => `<option value="${z.id}">${esc(z.name)} · ${z.radius} m</option>`).join('');
+            const sync = () => { const c = COURSE[$('stCourse').value]; if (c && zones.some(z => z.id === c.zone && z.active)) $('stZone').value = c.zone; };
+            $('stCourse').onchange = sync; sync();
+            $('stDur').value = String([10, 15, 20, 30, 45].includes(DEF_DUR) ? DEF_DUR : 15);
+            $('stLate').value = String([5, 10, 15].includes(DEF_LATE) ? DEF_LATE : 10);
+            $('stQr').checked = !!S.qrVerify;
+            $('startModal').classList.add('show');
+        }
+        $('startBtn').addEventListener('click', () => openStart());
+        $('stCancel').addEventListener('click', () => $('startModal').classList.remove('show'));
+        $('startModal').addEventListener('click', e => { if (e.target.id === 'startModal') $('startModal').classList.remove('show'); });
+        $('stGo').addEventListener('click', () => {
+            const code = $('stCourse').value, c = COURSE[code];
+            if (!teacherOf(code)) return ui.toast(`Assign a teacher to ${code} first (Courses page).`, 'error');
+            if (!enrolled(code).length) return ui.toast(`${code} has no active students enrolled.`, 'error');
+            const s = newSession(code, { duration: +$('stDur').value, lateAfter: +$('stLate').value, zone: $('stZone').value, qr: $('stQr').checked });
+            sessions.push(s); persist();
+            $('startModal').classList.remove('show');
+            $('feed').insertAdjacentHTML('afterbegin', sysFeed(`${code} session started`, `${c.room} · open for ${s.duration} min${s.qr ? ' · QR required' : ''}`, 'start'));
+            renderStats(); renderCards(false); renderUpcoming();
+            const card = document.querySelector(`[data-card="${s.id}"]`);
+            if (card) { fx.enter([card]); card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+            ui.toast(`${code} session started — open for ${s.duration} minutes.`);
+        });
+
+        /* ================= CLOCKS & DEMO SIMULATION ================= */
+        // every second: countdowns, progress bars, "x min ago", auto-close
+        setInterval(() => {
+            const now = Date.now();
+            sessions.forEach(s => {
+                const left = endsAt(s) - now;
+                const lt = document.querySelector(`[data-left="${s.id}"]`), bar = document.querySelector(`[data-bar="${s.id}"]`), card = document.querySelector(`[data-card="${s.id}"]`);
+                if (lt) lt.textContent = left > 0 ? `${mmss(left)} left` : 'Time up';
+                if (bar) bar.style.width = Math.max(0, Math.min(100, left / (s.duration * MIN) * 100)) + '%';
+                if (card) card.classList.toggle('ending', left < 2 * MIN);
+                const el = document.querySelector(`[data-elapsed="${s.id}"]`);
+                if (el) el.textContent = `LIVE · ${Math.floor((now - s.startedAt) / MIN)}m`;
+                if (monitorId === s.id && $('mLeft')) $('mLeft').textContent = left > 0 ? mmss(left) : '0:00';
+                if (left <= 0 && AUTO_CLOSE) endSession(s.id, true);
+            });
+            document.querySelectorAll('[data-ago]').forEach(el => el.textContent = ago(+el.dataset.ago));
+        }, 1000);
+
+        // demo: a student checks in (or gets blocked) every few seconds
+        let simOn = true;
+        $('simToggle').addEventListener('change', e => {
+            simOn = e.target.checked;
+            $('feedState').style.visibility = simOn ? 'visible' : 'hidden';
+            ui.toast(simOn ? 'Demo check-ins on.' : 'Demo check-ins paused.', 'info');
+        });
+        function simulate() {
+            if (!simOn || document.hidden) return;
+            const open = sessions.filter(s => endsAt(s) > Date.now() && enrolled(s.code).some(st => !s.checkins.some(x => x.sid === st.id)));
+            if (!open.length) return;
+            const s = open[Math.floor(Math.random() * open.length)], z = zoneOf(s);
+            const waiting = enrolled(s.code).filter(st => !s.checkins.some(x => x.sid === st.id));
+            const st = waiting[Math.floor(Math.random() * waiting.length)], at = Date.now();
+            if (Math.random() < .1) {
+                const f = { sid: st.id, at, reason: FLAGS[Math.floor(Math.random() * FLAGS.length)], dist: Math.round(z.radius + 15 + Math.random() * 90) };
+                s.flags.push(f);
+                pushFeed({ type: 'flag', code: s.code, sid: st.id, at, reason: f.reason, dist: f.dist });
+            } else {
+                const ci = { sid: st.id, at, status: statusFor(s, at), dist: Math.round(3 + Math.random() * z.radius * .85), acc: Math.round(5 + Math.random() * 20) };
+                s.checkins.push(ci);
+                pushFeed({ type: ci.status, code: s.code, sid: st.id, at, dist: ci.dist });
+            }
+            persist(); updateCard(s); renderStats();
+            if (monitorId === s.id) renderMonitor();
+        }
+        (function loop() { simulate(); setTimeout(loop, 2500 + Math.random() * 2500); })();
+
+        /* ---------- Search ---------- */
+        let st;
+        $('topSearch').addEventListener('input', e => { clearTimeout(st); st = setTimeout(() => { query = e.target.value.trim(); renderCards(true); }, 180); });
+
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || document.querySelector('.modal-bg.show') || document.querySelector('.tb-pop.show')) return;
+            if ($('startModal').classList.contains('show')) return $('startModal').classList.remove('show');
+            closeMonitor();
+        });
+
+        /* ================= INIT ================= */
+        renderStats(); renderCards(false); renderFeed(); renderUpcoming(); renderEnded(false);
+        fx.enter('.page-head, #stats > div, .main > .row > div');
+        document.querySelectorAll('.stat .value').forEach(v => fx.countUp(v));
+        const params = new URLSearchParams(location.search);
+        if (params.get('start')) setTimeout(() => openStart(params.get('start').toUpperCase()), 400);
+    </script>
+</body>
+</html>
