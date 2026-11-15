@@ -290,7 +290,7 @@
             users.filter(u => u.role === 'teacher').forEach(u => {
                 if (teachers.some(t => t.email.toLowerCase() === (u.email || '').toLowerCase())) return;
                 teachers.push({
-                    id: 'u' + hash(u.email), name: u.name, emp: (u.id || '').toUpperCase(), desig: 'Lecturer', dept: DEPTS.includes(u.dept) ? u.dept : 'Computer Science',
+                    id: 'u' + hash(u.email), name: u.name, emp: (u.id || '').toUpperCase(), desig: DESIGS.includes(u.desig) ? u.desig : 'Lecturer', dept: DEPTS.includes(u.dept) ? u.dept : 'Computer Science',
                     courses: [], status: 'pending', qual: '', email: u.email, phone: '', office: '', joined: new Date().toISOString().slice(0, 10),
                     perms: { startSessions: true, editAttendance: true, manageGeofences: false, exportReports: true }, source: 'signup'
                 });

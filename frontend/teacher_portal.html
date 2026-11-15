@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Portal | GeoAttend</title>
+
+    <!-- Demo route guard: only a signed-in teacher may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'teacher') location.replace('login.html?role=teacher');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        .view { display: none; }
+        .view.active { display: block; animation: fxIn .4s ease; }
+        .st-present { color: #047857; background: rgba(16,185,129,.12); }
+        .st-late { color: #b45309; background: rgba(245,158,11,.14); }
+        .st-absent { color: #be123c; background: rgba(244,63,94,.10); }
+        .st-excused { color: #0369a1; background: rgba(2,132,199,.12); }
+        .st-flag { color: #be123c; background: rgba(244,63,94,.10); }
+        .edited-tag { color: #6d28d9; background: rgba(139,92,246,.12); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .live-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; }
+        .side-nav .live-dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; display: none; }
+        .side-nav a.has-live .live-dot { display: block; }
+
+        /* Hero */
+        .hero { padding: 24px; position: relative; overflow: hidden; color: #fff; background: linear-gradient(135deg, #4338ca, #6d5ce8 55%, #14b8a6); border: 0; }
+        .hero::after { content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,.12); }
+        .hero::before { content: ""; position: absolute; right: 80px; bottom: -90px; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,.08); }
+        .hero h2 { font-size: 26px; font-weight: 800; margin: 0 0 4px; position: relative; z-index: 1; }
+        .hero p { margin: 0; opacity: .92; position: relative; z-index: 1; font-size: 14px; }
+        .hero .next { margin-top: 14px; display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 12px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); font-size: 13.5px; font-weight: 600; position: relative; z-index: 1; }
+        .hero .acts { position: relative; z-index: 1; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+        .hero .btn-white { background: #fff; color: var(--primary); border: 0; padding: 10px 16px; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; transition: transform .2s; }
+        .hero .btn-white:hover { transform: translateY(-1px); }
+        .hero .btn-ghost { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35); padding: 10px 16px; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 600; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+
+        .live-banner { display: none; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 18px; border-color: rgba(16,185,129,.35) !important; }
+        .live-banner.show { display: flex; animation: fxIn .4s ease; }
+        .live-banner .lb-ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 20px; color: #fff; background: linear-gradient(135deg, #10b981, #0d9488); flex-shrink: 0; }
+        .live-banner b { display: block; font-size: 14.5px; }
+        .live-banner small { color: var(--muted); }
+
+        /* Today timeline */
+        .tl-item { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px dashed var(--line); align-items: center; }
+        .tl-item:last-child { border-bottom: 0; }
+        .tl-time { width: 58px; flex-shrink: 0; font-weight: 800; font-size: 14px; color: var(--ink); }
+        .tl-time small { display: block; font-weight: 500; color: var(--muted); font-size: 11.5px; }
+        .tl-card { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.65); border-left: 4px solid var(--c1); min-width: 0; }
+        .tl-card b { font-size: 13.5px; display: block; }
+        .tl-card small { color: var(--muted); font-size: 12px; }
+        .tl-card .r { margin-left: auto; flex-shrink: 0; }
+        .tl-card button { padding: 7px 12px; font-size: 12.5px; box-shadow: none; }
+        .risk { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+        .risk:last-child { border-bottom: 0; }
+        .risk .ini { width: 34px; height: 34px; border-radius: 10px; font-size: 11.5px; }
+        .risk b { font-size: 13.5px; display: block; }
+        .risk small { color: var(--muted); font-size: 12px; }
+        .risk .pct { margin-left: auto; font-weight: 800; color: var(--rose); flex-shrink: 0; }
+        .risk button { padding: 5px 10px; font-size: 12px; box-shadow: none; flex-shrink: 0; }
+        .chart-box { position: relative; height: 250px; }
+
+        /* Course cards */
+        .c-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .c-card { border-radius: 18px; overflow: hidden; background: rgba(255,255,255,.66); border: 1.5px solid rgba(255,255,255,.95); display: flex; flex-direction: column; transition: transform .25s, box-shadow .25s; }
+        .c-card:hover { transform: translateY(-4px); box-shadow: 0 18px 32px -18px rgba(48,56,120,.5); }
+        .c-top { padding: 14px 16px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .c-top .code { font-size: 12px; font-weight: 800; opacity: .92; display: flex; justify-content: space-between; }
+        .c-top h4 { font-size: 17px; font-weight: 800; margin: 3px 0 2px; }
+        .c-top small { opacity: .92; font-size: 12px; }
+        .c-top .lv { background: #fff; color: #047857; border-radius: 20px; padding: 1px 8px; font-size: 11px; }
+        .c-body { padding: 14px 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .c-body div { text-align: center; padding: 8px 4px; border-radius: 12px; background: rgba(27,34,64,.035); }
+        .c-body b { display: block; font-size: 17px; font-weight: 800; }
+        .c-body span { font-size: 11px; color: var(--muted); font-weight: 600; }
+        .c-line { padding: 0 16px 10px; font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+        .c-line i { color: var(--muted); }
+        .c-foot { display: flex; gap: 6px; padding: 10px 12px 12px; border-top: 1px dashed var(--line); margin-top: auto; }
+        .c-foot button { flex: 1; padding: 8px; font-size: 12.5px; box-shadow: none; }
+
+        /* Take attendance */
+        .att-grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; }
+        .countdown { text-align: center; padding: 22px; border-radius: 20px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .countdown .big { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; margin: 6px 0; }
+        .countdown small { opacity: .92; }
+        .countdown .ring2 { width: 120px; height: 120px; border-radius: 50%; margin: 14px auto 6px; display: grid; place-items: center; background: conic-gradient(#fff var(--p), rgba(255,255,255,.25) 0); transition: background .5s; }
+        .countdown .ring2 > div { width: 96px; height: 96px; border-radius: 50%; background: rgba(27,34,64,.18); display: grid; place-items: center; }
+        .countdown .ring2 b { font-size: 22px; font-weight: 800; display: block; line-height: 1; }
+        .sess-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+        .qr-card { margin-top: 14px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,.75); border: 1px solid var(--line); text-align: center; }
+        .qr-card #qr { width: 170px; height: 170px; margin: 6px auto; padding: 8px; background: #fff; border-radius: 14px; display: grid; place-items: center; box-shadow: 0 8px 20px -12px rgba(27,34,64,.5); }
+        .qr-card #qr img, .qr-card #qr canvas { width: 154px !important; height: 154px !important; }
+        .tok { font-family: ui-monospace, monospace; font-size: 16px; font-weight: 800; letter-spacing: 3px; color: var(--primary); }
+        .qbar { height: 5px; border-radius: 5px; background: rgba(27,34,64,.08); overflow: hidden; margin: 8px 0 10px; }
+        .qbar span { display: block; height: 100%; background: var(--primary); transition: width 1s linear; }
+        .lst .stu { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+        .lst .stu:last-child { border-bottom: 0; }
+        .lst .ini { width: 32px; height: 32px; border-radius: 10px; font-size: 11px; }
+        .lst b { font-size: 13px; color: var(--ink); display: block; }
+        .lst small { font-size: 12px; color: var(--muted); }
+        .lst .act { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+        .lst .act button { padding: 5px 9px; font-size: 11.5px; box-shadow: none; }
+        .lst .stu.new { animation: fxIn .45s ease; background: rgba(16,185,129,.06); }
+        .lst-wrap { max-height: 520px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+        .start-card .row-between { padding: 6px 0; }
+        .sim { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; user-select: none; }
+
+        /* QR full screen */
+        .qr-full { position: fixed; inset: 0; z-index: 3000; background: linear-gradient(135deg, #1e1b4b, #312e81 50%, #0f766e); color: #fff; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+        .qr-full.show { display: flex; animation: fxIn .3s ease; }
+        .qr-full h1 { font-size: clamp(22px, 4vw, 40px); font-weight: 800; margin: 0; }
+        .qr-full p { opacity: .85; margin: 4px 0 18px; font-size: clamp(14px, 2vw, 18px); }
+        .qr-full #qrBig { background: #fff; padding: 18px; border-radius: 24px; width: min(70vh, 80vw); height: min(70vh, 80vw); display: grid; place-items: center; }
+        .qr-full #qrBig img, .qr-full #qrBig canvas { width: 100% !important; height: 100% !important; }
+        .qr-full .meta { display: flex; gap: 28px; margin-top: 18px; font-size: clamp(14px, 2vw, 20px); font-weight: 700; flex-wrap: wrap; justify-content: center; }
+        .qr-full .close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 12px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+
+        /* Records */
+        .rec-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; align-items: center; }
+        .rec-filters .f-select { width: auto; min-width: 150px; padding: 9px 34px 9px 12px; font-size: 13.5px; }
+        .sess { border-radius: 16px; background: rgba(255,255,255,.6); border: 1.5px solid rgba(255,255,255,.95); margin-bottom: 10px; overflow: hidden; }
+        .sess-h { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+        .sess-h:hover { background: rgba(255,255,255,.8); }
+        .sess-h .cc { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; font-weight: 800; font-size: 11px; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+        .sess-h b { font-size: 14px; display: block; }
+        .sess-h small { color: var(--muted); font-size: 12px; }
+        .sess-h .counts { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+        .sess-h .pct-cell { width: 130px; flex-shrink: 0; }
+        .sess-h .chev { color: var(--muted); transition: transform .25s; }
+        .sess.open .chev { transform: rotate(180deg); }
+        .sess-b { display: none; padding: 4px 14px 12px; border-top: 1px dashed var(--line); }
+        .sess.open .sess-b { display: block; animation: fxIn .3s ease; }
+        .lock { font-size: 11.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+
+        /* Timetable */
+        .tt-wrap { overflow-x: auto; }
+        .tt { display: grid; grid-template-columns: 70px repeat(5, minmax(140px, 1fr)); gap: 6px; min-width: 780px; }
+        .tt .h { font-size: 12px; font-weight: 800; color: var(--ink-2); text-align: center; padding: 8px 0; border-radius: 10px; background: rgba(27,34,64,.04); }
+        .tt .h.today { background: rgba(67,56,202,.10); color: var(--primary); }
+        .tt .t { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 8px; }
+        .tt .cell { min-height: 70px; border-radius: 12px; background: rgba(27,34,64,.025); border: 1px dashed rgba(27,34,64,.06); padding: 4px; }
+        .tt .blk { border-radius: 10px; padding: 8px 10px; color: #fff; font-size: 12px; line-height: 1.35; background: linear-gradient(135deg, var(--c1), var(--c2)); height: 100%; }
+        .tt .blk b { display: block; font-size: 13px; }
+        .next-card { display: flex; gap: 14px; align-items: center; padding: 16px; border-radius: 18px; color: #fff; background: linear-gradient(135deg, var(--c1, #4338ca), var(--c2, #6d5ce8)); margin-bottom: 16px; }
+        .next-card .big { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+        /* Announcements */
+        .ann { display: flex; gap: 12px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.6); margin-bottom: 8px; }
+        .ann .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; font-size: 17px; }
+        .ann b { font-size: 14px; }
+        .ann p { font-size: 13px; color: var(--ink-2); margin: 3px 0 6px; }
+        .ann .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ann .del { margin-left: auto; border: 0; background: transparent; color: var(--muted); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; flex-shrink: 0; }
+        .ann .del:hover { color: var(--rose); background: rgba(244,63,94,.08); }
+        .type-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .type-pick input { display: none; }
+        .type-pick label > span { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 12px; cursor: pointer; background: rgba(255,255,255,.7); border: 1.5px solid var(--line); font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+        .type-pick input:checked + span { border-color: var(--primary); color: var(--primary); background: rgba(67,56,202,.07); }
+        textarea.f-input { resize: vertical; min-height: 90px; }
+
+        /* Profile */
+        .p-card { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+        .p-card .ini { width: 84px; height: 84px; border-radius: 24px; font-size: 28px; border: 3px solid #fff; box-shadow: 0 12px 26px -12px rgba(27,34,64,.5); }
+        .perm-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+        .perm-row:last-child { border-bottom: 0; }
+
+        @media (max-width: 1199.98px) { .att-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 575.98px) {
+            .hero h2 { font-size: 21px; }
+            .hero .next { display: block; line-height: 1.5; }
+            .sess-h { flex-wrap: wrap; }
+            .sess-h .counts { margin-left: 58px; }
+            .sess-h .pct-cell { flex: 1; width: auto; }
+            .countdown .big { font-size: 38px; }
+            .tl-item { align-items: flex-start; }
+            .tl-card { flex-wrap: wrap; }
+        }
+        @media print { .no-print { display: none !important; } }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Teacher Portal</small></div>
+        </div>
+        <div class="nav-label">Teaching</div>
+        <ul class="side-nav" id="nav">
+            <li><a href="#dashboard" data-v="dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
+            <li><a href="#classes" data-v="classes"><i class="bi bi-journal-bookmark"></i> My Classes</a></li>
+            <li><a href="#attendance" data-v="attendance" id="navAtt"><i class="bi bi-broadcast"></i> Take Attendance <span class="live-dot"></span></a></li>
+            <li><a href="#records" data-v="records"><i class="bi bi-clipboard-check"></i> Attendance Records</a></li>
+            <li><a href="#timetable" data-v="timetable"><i class="bi bi-calendar-week"></i> Timetable</a></li>
+        </ul>
+        <div class="nav-label">Insights &amp; contact</div>
+        <ul class="side-nav">
+            <li><a href="#reports" data-v="reports"><i class="bi bi-bar-chart-line"></i> Reports</a></li>
+            <li><a href="#announcements" data-v="announcements"><i class="bi bi-megaphone"></i> Announcements</a></li>
+        </ul>
+        <div class="nav-label">Account</div>
+        <ul class="side-nav">
+            <li><a href="#profile" data-v="profile"><i class="bi bi-person-circle"></i> My Profile</a></li>
+            <li><a href="login.html?role=teacher" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="topSearch" placeholder="Search my students or courses…">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" id="bellBtn"><i class="bi bi-bell"></i><span class="dot" id="bellDot" style="display:none"></span></button>
+                <div class="profile">
+                    <div class="avatar" id="topAvatar">T</div>
+                    <div><b id="topName">Teacher</b><small id="topTitle">Teacher</small></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- ===== DASHBOARD ===== -->
+        <section class="view" id="v-dashboard">
+            <div class="glass live-banner" id="liveBanner">
+                <div class="lb-ic"><i class="bi bi-broadcast"></i></div>
+                <div style="min-width:0;flex:1"><b id="lbTitle"></b><small id="lbSub"></small></div>
+                <button class="btn-primary-grad" data-goto="attendance"><i class="bi bi-display"></i> Open</button>
+            </div>
+            <div class="glass hero mb-4">
+                <h2 id="greet">Welcome</h2>
+                <p id="greetSub"></p>
+                <div class="next" id="nextClass"></div>
+                <div class="acts">
+                    <button class="btn-white" data-goto="attendance"><i class="bi bi-broadcast"></i> Take Attendance</button>
+                    <button class="btn-ghost" data-goto="records"><i class="bi bi-clipboard-check"></i> View Records</button>
+                </div>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#4338ca;--tint-bg:rgba(67,56,202,.12)"><div class="stat-icon"><i class="bi bi-journal-bookmark-fill"></i></div><div><div class="label">My Courses</div><div class="value" id="dCourses">0</div></div></div></div>
+                <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#0284c7;--tint-bg:rgba(2,132,199,.12)"><div class="stat-icon"><i class="bi bi-people-fill"></i></div><div><div class="label">My Students</div><div class="value" id="dStudents">0</div></div></div></div>
+                <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#10b981;--tint-bg:rgba(16,185,129,.12)"><div class="stat-icon"><i class="bi bi-graph-up-arrow"></i></div><div><div class="label">Avg. Attendance</div><div class="value" id="dAvg">0%</div><div class="sub">last 30 days</div></div></div></div>
+                <div class="col-6 col-lg-3"><div class="stat glass" style="--tint:#f43f5e;--tint-bg:rgba(244,63,94,.12)"><div class="stat-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div><div class="label">At Risk</div><div class="value" id="dRisk">0</div><div class="sub" id="dRiskSub"></div></div></div></div>
+            </div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-5">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-calendar-day"></i> <span id="todayTitle">Today's Classes</span></h3><p id="todaySub"></p></div></div>
+                        <div id="todayList"></div>
+                    </div>
+                </div>
+                <div class="col-xl-7">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-activity"></i> Attendance Trend</h3><p>Weekly attendance in my courses</p></div></div>
+                        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-exclamation-triangle"></i> Students at Risk</h3><p id="riskSub"></p></div><button class="link-btn" data-goto="reports">Full report</button></div>
+                        <div class="row g-0" id="riskList"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== MY CLASSES ===== -->
+        <section class="view" id="v-classes">
+            <div class="page-head"><div><h2>My Classes</h2><p>Courses assigned to you this semester.</p></div></div>
+            <div class="c-grid" id="classGrid"></div>
+        </section>
+
+        <!-- ===== TAKE ATTENDANCE ===== -->
+        <section class="view" id="v-attendance">
+            <div class="page-head">
+                <div><h2>Take Attendance</h2><p>Start a session — students inside the geofence check in from their phones.</p></div>
+                <label class="sim" title="No backend yet — simulate students checking in"><span class="switch-t sm"><input type="checkbox" id="simToggle" checked><span></span></span> Demo check-ins</label>
+            </div>
+            <div id="attArea"></div>
+        </section>
+
+        <!-- ===== RECORDS ===== -->
+        <section class="view" id="v-records">
+            <div class="page-head">
+                <div><h2>Attendance Records</h2><p id="recSub"></p></div>
+                <button class="btn-glass" id="recExport"><i class="bi bi-download"></i> Export CSV</button>
+            </div>
+            <div class="panel glass">
+                <div class="rec-filters">
+                    <select class="f-select" id="rCourse" aria-label="Course"></select>
+                    <select class="f-select" id="rRange" aria-label="Date range"><option value="7">Last 7 days</option><option value="14" selected>Last 2 weeks</option><option value="30">Last 30 days</option></select>
+                    <select class="f-select" id="rStatus" aria-label="Status"><option value="">All statuses</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option></select>
+                    <span class="f-help m-0 ms-auto" id="editNote"></span>
+                </div>
+                <div id="recList"></div>
+            </div>
+        </section>
+
+        <!-- ===== TIMETABLE ===== -->
+        <section class="view" id="v-timetable">
+            <div class="page-head"><div><h2>Timetable</h2><p>Your weekly teaching schedule.</p></div></div>
+            <div id="nextCard"></div>
+            <div class="panel glass"><div class="tt-wrap" id="ttArea"></div></div>
+        </section>
+
+        <!-- ===== REPORTS ===== -->
+        <section class="view" id="v-reports">
+            <div class="page-head">
+                <div><h2>Reports</h2><p>Attendance in your courses over the last 35 days.</p></div>
+                <div class="d-flex gap-2 flex-wrap no-print">
+                    <select class="f-select" id="repCourse" style="width:auto;min-width:200px" aria-label="Course"></select>
+                    <button class="btn-glass" id="repPrint"><i class="bi bi-printer"></i> Print</button>
+                    <button class="btn-primary-grad" id="repExport"><i class="bi bi-download"></i> Export CSV</button>
+                </div>
+            </div>
+            <div class="row g-3 mb-4" id="repKpis"></div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-6"><div class="panel glass"><div class="panel-head"><div><h3><i class="bi bi-bar-chart"></i> Session by Session</h3><p>Last 12 sessions</p></div></div><div class="chart-box"><canvas id="repChart"></canvas></div></div></div>
+                <div class="col-xl-6"><div class="panel glass"><div class="panel-head"><div><h3><i class="bi bi-pie-chart"></i> Status Mix</h3><p>All records in the period</p></div></div><div class="chart-box"><canvas id="repDonut"></canvas></div></div></div>
+                <div class="col-12"><div class="panel glass">
+                    <div class="panel-head"><div><h3><i class="bi bi-people"></i> Students</h3><p>Lowest attendance first</p></div><input class="f-input no-print" id="repSearch" placeholder="Search student" style="max-width:240px"></div>
+                    <div class="table-responsive"><table class="table table-glass"><thead><tr><th>Student</th><th>Course</th><th>Classes</th><th>Present</th><th>Late</th><th>Absent</th><th>Attendance</th><th>Status</th></tr></thead><tbody id="repTable"></tbody></table></div>
+                </div></div>
+            </div>
+        </section>
+
+        <!-- ===== ANNOUNCEMENTS ===== -->
+        <section class="view" id="v-announcements">
+            <div class="page-head"><div><h2>Announcements</h2><p>Message your students about classes, rooms and attendance.</p></div></div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-5">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-megaphone"></i> New Announcement</h3></div></div>
+                        <div class="field"><label class="f-label">Type</label>
+                            <div class="type-pick">
+                                <label><input type="radio" name="aType" value="announcement" checked><span><i class="bi bi-megaphone"></i>Announcement</span></label>
+                                <label><input type="radio" name="aType" value="reminder"><span><i class="bi bi-alarm"></i>Reminder</span></label>
+                                <label><input type="radio" name="aType" value="urgent"><span><i class="bi bi-exclamation-triangle"></i>Urgent</span></label>
+                            </div>
+                        </div>
+                        <div class="field"><label class="f-label" for="aTo">Send to</label><select class="f-select" id="aTo"></select></div>
+                        <div class="field"><label class="f-label" for="aTitle">Title</label><input class="f-input" id="aTitle" maxlength="60" placeholder="e.g. Class moved to Lab 3"></div>
+                        <div class="field"><label class="f-label" for="aMsg">Message</label><textarea class="f-input" id="aMsg" maxlength="250" placeholder="Write your message…"></textarea><div class="f-help d-flex justify-content-between"><span>Students get it in the app.</span><span id="aCount">0 / 250</span></div></div>
+                        <div class="field"><label class="f-label">Also send by</label>
+                            <div class="chips"><label><input type="checkbox" value="push" checked><span><i class="bi bi-phone"></i> Push</span></label><label><input type="checkbox" value="email"><span><i class="bi bi-envelope"></i> Email</span></label></div>
+                        </div>
+                        <button class="btn-primary-grad w-100" id="aSend"><i class="bi bi-send"></i> Send Announcement</button>
+                    </div>
+                </div>
+                <div class="col-xl-7">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-clock-history"></i> Sent</h3><p id="annSub"></p></div></div>
+                        <div id="annList"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PROFILE ===== -->
+        <section class="view" id="v-profile">
+            <div class="page-head"><div><h2>My Profile</h2><p>Your details, password and permissions.</p></div></div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-7">
+                    <div class="panel glass mb-3">
+                        <div class="p-card mb-3" id="pCard"></div>
+                        <div class="row g-3">
+                            <div class="col-sm-6"><label class="f-label">Full name</label><input class="f-input" id="pName" disabled></div>
+                            <div class="col-sm-6"><label class="f-label">Email</label><input class="f-input" id="pEmail" disabled></div>
+                            <div class="col-sm-6"><label class="f-label" for="pPhone">Phone</label><input class="f-input" id="pPhone"></div>
+                            <div class="col-sm-6"><label class="f-label" for="pOffice">Office</label><input class="f-input" id="pOffice" maxlength="30"></div>
+                            <div class="col-12"><label class="f-label" for="pQual">Qualification</label><input class="f-input" id="pQual" maxlength="60"></div>
+                            <div class="col-12 d-flex justify-content-between align-items-center"><small class="text-muted">Name, email and department are managed by the admin.</small><button class="btn-primary-grad" id="pSave"><i class="bi bi-check2-circle"></i> Save</button></div>
+                        </div>
+                    </div>
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-key"></i> Change Password</h3></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-4"><label class="f-label" for="pwCur">Current</label><input class="f-input" type="password" id="pwCur" autocomplete="current-password"></div>
+                            <div class="col-md-4"><label class="f-label" for="pwNew">New</label><input class="f-input" type="password" id="pwNew" autocomplete="new-password"></div>
+                            <div class="col-md-4"><label class="f-label" for="pwNew2">Confirm</label><input class="f-input" type="password" id="pwNew2" autocomplete="new-password"></div>
+                            <div class="col-12 text-end"><button class="btn-glass" id="pwSave"><i class="bi bi-lock"></i> Update Password</button></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-shield-lock"></i> What I can do</h3><p>Set by the admin</p></div></div>
+                        <div id="permList"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ================= COURSE DRAWER ================= -->
+    <div class="drawer-shade" id="shade"></div>
+    <aside class="drawer glass wide" id="courseDrawer" aria-hidden="true">
+        <div class="drawer-head"><div><h3 id="cdTitle"></h3><p id="cdSub"></p></div><button class="icon-btn" data-close aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+        <div class="drawer-body" id="cdBody"></div>
+    </aside>
+
+    <!-- ================= CHANGE STATUS MODAL ================= -->
+    <div class="n-modal" id="editModal">
+        <div class="box glass">
+            <h4 id="emTitle">Correct attendance</h4>
+            <p id="emText"></p>
+            <div class="chips mb-3" id="emStatus">
+                <label><input type="radio" name="em" value="present"><span>Present</span></label>
+                <label><input type="radio" name="em" value="late"><span>Late</span></label>
+                <label><input type="radio" name="em" value="absent"><span>Absent</span></label>
+                <label><input type="radio" name="em" value="excused"><span>Excused</span></label>
+            </div>
+            <div class="field"><label class="f-label" for="emReason">Reason *</label><textarea class="f-input" id="emReason" maxlength="160" placeholder="e.g. Student was in class but GPS failed"></textarea></div>
+            <div class="d-flex gap-2 justify-content-end"><button class="btn-glass" id="emCancel">Cancel</button><button class="btn-primary-grad" id="emSave"><i class="bi bi-check2-circle"></i> Save</button></div>
+        </div>
+    </div>
+
+    <!-- ================= QR FULL SCREEN ================= -->
+    <div class="qr-full" id="qrFull">
+        <button class="close" id="qrClose"><i class="bi bi-x-lg"></i> Close (Esc)</button>
+        <h1 id="qfTitle"></h1>
+        <p>Open GeoAttend on your phone and scan to mark attendance</p>
+        <div id="qrBig"></div>
+        <div class="meta"><span><i class="bi bi-people"></i> <span id="qfCount"></span></span><span><i class="bi bi-hourglass-split"></i> <span id="qfLeft"></span></span><span class="tok" style="color:#fff" id="qfTok"></span></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="assets/data.js"></script>
+    <script>
+        /* ---------- Who is signed in (set before topbar.js builds the profile menu) ---------- */
+        const SESSION = (() => { try { return JSON.parse(sessionStorage.getItem('ga_session')) || {}; } catch { return {}; } })();
+        let teachers = GA.loadTeachers();
+        const ME = teachers.find(t => t.id === SESSION.teacherId) || teachers.find(t => t.email === SESSION.email);
+        if (!ME) { try { sessionStorage.removeItem('ga_session'); } catch (e) {} location.replace('login.html?role=teacher'); }
+        window.GA_PROFILE = ME && {
+            name: ME.name, email: ME.email, title: `${ME.desig} · ${ME.dept}`, icon: 'bi-person-video3', logout: 'login.html?role=teacher',
+            links: [['#profile', 'bi-person', 'My Profile'], ['#timetable', 'bi-calendar-week', 'My Timetable'], ['#announcements', 'bi-megaphone', 'Announcements']]
+        };
+    </script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * TEACHER PORTAL
+         * Uses the shared demo data in assets/data.js, so everything here is visible to the admin:
+         *   sessions you start → admin "Live Sessions"; corrections → admin "Attendance Records" (audit trail);
+         *   announcements → admin "Notifications" sent history.
+         * Later every read/write here becomes a call to the backend API for the signed-in teacher.
+         */
+        if (!ME) throw new Error('No teacher signed in');   // redirected to login above
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const S = GA.settings();
+        const MIN_ATT = S.minAttendance || 75, AUTO_CLOSE = S.autoClose !== false, EDIT_HOURS = +(S.editWindow || 24);
+        const QR_INT = +(S.qrInterval || 15) * 1000;
+        const DAY = 864e5, MIN = 6e4;
+        const DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const STATUS = { present: ['Present', 'st-present', '#10b981'], late: ['Late', 'st-late', '#f59e0b'], absent: ['Absent', 'st-absent', '#f43f5e'], excused: ['Excused', 'st-excused', '#0284c7'] };
+        const DEPT_COLORS = {
+            'Computer Science': ['#4338ca', '#6d5ce8'], 'Software Engineering': ['#0d9488', '#14b8a6'], 'Artificial Intelligence': ['#7c3aed', '#a855f7'],
+            'Information Technology': ['#0369a1', '#0ea5e9'], 'Electrical Engineering': ['#c2410c', '#f59e0b'], 'Mathematics': ['#be123c', '#f43f5e']
+        };
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+        const FLAGS = ['Outside the geofence', 'Mock location app detected', 'GPS accuracy too low', 'Unregistered device'];
+        const PERMS = ME.perms || {};
+
+        const allCourses = GA.loadCourses(), COURSE = Object.fromEntries(allCourses.map(c => [c.code, c]));
+        const MY = allCourses.filter(c => ME.courses.includes(c.code));
+        const MYCODES = new Set(MY.map(c => c.code));
+        const students = GA.loadStudents(), STU = Object.fromEntries(students.map(s => [s.id, s]));
+        const zones = GA.loadZones();
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const key = GA.dateKey, parse = s => new Date(s + 'T00:00:00');
+
+        const enrolled = code => students.filter(s => s.courses.includes(code) && s.status === 'active');
+        const myStudents = () => { const ids = new Set(); MY.forEach(c => enrolled(c.code).forEach(s => ids.add(s.id))); return [...ids].map(id => STU[id]); };
+        const zoneOf = id => zones.find(z => z.id === id) || zones[0];
+        const colors = code => DEPT_COLORS[COURSE[code]?.dept] || ['#4338ca', '#6d5ce8'];
+        const initials = n => n.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, '').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const pcolor = id => PALETTE[GA.hash(id) % PALETTE.length];
+        const clock = t => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        const fmtDate = d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+        const endTime = c => { const [h, m] = c.time.split(':').map(Number), t = h * 60 + m + c.dur; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+        const pctCol = p => p >= 85 ? '#10b981' : p >= MIN_ATT ? '#f59e0b' : '#f43f5e';
+        const barCol = p => p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+        const readLS = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+        const writeLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+        /* ---------- Top bar ---------- */
+        $('topName').textContent = ME.name;
+        $('topTitle').textContent = ME.desig;
+        $('topAvatar').textContent = initials(ME.name);
+        $('bellBtn').addEventListener('click', () => go('announcements'));
+
+        /* ================= ATTENDANCE DATA ================= */
+        const HISTORY = GA.historyRecords(35).filter(r => MYCODES.has(r.code));
+        let edits = GA.loadEdits();
+        let RECORDS = [];
+        function rebuildRecords() {
+            const manual = readLS('ga_att_manual', []).filter(r => MYCODES.has(r.code));
+            const fromSessions = GA.loadSessionRecords().filter(r => MYCODES.has(r.code));   // classes ended today
+            const map = new Map();
+            [...HISTORY, ...fromSessions, ...manual].forEach(r => map.set(r.id, { ...r }));
+            map.forEach(r => { const h = edits[r.id]; if (h && h.length) { r.original = r.status; r.status = h[h.length - 1].status; r.edited = true; } });
+            RECORDS = [...map.values()];
+        }
+        rebuildRecords();
+        const counted = rs => rs.filter(r => r.status !== 'excused');
+        const rateOf = rs => { const c = counted(rs); return c.length ? c.filter(r => r.status === 'present' || r.status === 'late').length / c.length * 100 : null; };
+        function studentStats(code) {
+            const rows = RECORDS.filter(r => (!code || r.code === code));
+            const by = {};
+            rows.forEach(r => { const k = r.sid + '|' + r.code; (by[k] = by[k] || { sid: r.sid, code: r.code, present: 0, late: 0, absent: 0, excused: 0 })[r.status]++; });
+            return Object.values(by).map(x => { const tot = x.present + x.late + x.absent; return { ...x, total: tot + x.excused, pct: tot ? (x.present + x.late) / tot * 100 : 100 }; });
+        }
+
+        /* ================= LIVE SESSIONS (shared with admin) ================= */
+        let sessions = GA.loadSessions();
+        const mySessions = () => sessions.filter(s => MYCODES.has(s.code));
+        const endsAt = s => s.startedAt + s.duration * MIN;
+        const saveSessions = () => GA.saveSessions(sessions);
+        function endSession(id, auto) {
+            const s = sessions.find(x => x.id === id); if (!s) return;
+            const n = enrolled(s.code).length, k = s.checkins.length;
+            sessions = sessions.filter(x => x.id !== id); saveSessions();
+            GA.finishSession(s, ME.name);   // saves every student's result as a record + the session summary
+            rebuildRecords();
+            if (selSession === id) selSession = null;
+            ui.toast(`${s.code} session ${auto ? 'closed automatically' : 'ended'} — ${k}/${n} checked in, ${n - k} marked absent.`, 'info');
+            refreshLiveUI(true);
+        }
+
+        /* ================= ROUTER ================= */
+        const VIEWS = ['dashboard', 'classes', 'attendance', 'records', 'timetable', 'reports', 'announcements', 'profile'];
+        let current = null;
+        function go(v) { if (location.hash !== '#' + v) location.hash = v; else show(v); }
+        function show(v) {
+            if (!VIEWS.includes(v)) v = 'dashboard';
+            current = v;
+            document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'v-' + v));
+            document.querySelectorAll('#sidebar a[data-v]').forEach(a => a.classList.toggle('active', a.dataset.v === v));
+            document.body.classList.remove('nav-open');
+            window.scrollTo({ top: 0, behavior: 'instant' });
+            ({ dashboard: renderDashboard, classes: renderClasses, attendance: renderAttendance, records: renderRecords, timetable: renderTimetable, reports: renderReports, announcements: renderAnnouncements, profile: renderProfile })[v]();
+        }
+        window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+        document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); go(g.dataset.goto); } });
+
+        /* ================= DASHBOARD ================= */
+        let trendChart;
+        function nextClassInfo() {
+            const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+            for (let i = 0; i < 8; i++) {
+                const d = new Date(today.getTime() + i * DAY), wd = d.getDay();
+                const list = MY.filter(c => c.status === 'active' && c.days.includes(wd)).filter(c => { if (i) return true; const [h, m] = c.time.split(':').map(Number); return h * 60 + m > nowMin; }).sort((a, b) => a.time.localeCompare(b.time));
+                if (list.length) { const c = list[0], [h, m] = c.time.split(':').map(Number); const at = new Date(d); at.setHours(h, m, 0, 0); return { c, at, day: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYN[wd] }; }
+            }
+            return null;
+        }
+        function renderDashboard() {
+            const hr = new Date().getHours();
+            $('greet').textContent = `${hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'}, ${ME.name.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, (m) => m)} 👋`;
+            $('greetSub').textContent = `${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${ME.desig}, ${ME.dept}`;
+            const nx = nextClassInfo();
+            $('nextClass').innerHTML = nx ? `<i class="bi bi-clock"></i> Next class: <b>${nx.c.code} · ${esc(nx.c.name)}</b> — ${nx.day} at ${nx.c.time}, ${esc(nx.c.room)}` : '<i class="bi bi-cup-hot"></i> No classes scheduled';
+            setv('dCourses', MY.length);
+            setv('dStudents', myStudents().length);
+            const last30 = RECORDS.filter(r => parse(r.date) >= new Date(today.getTime() - 30 * DAY));
+            const avg = rateOf(last30);
+            setv('dAvg', avg === null ? '—' : avg.toFixed(1) + '%');
+            const stats = studentStats().filter(x => x.pct < MIN_ATT);
+            setv('dRisk', stats.length); $('dRiskSub').textContent = `below ${MIN_ATT}%`;
+
+            // today
+            const wd = new Date().getDay(), nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+            const ended = GA.loadEnded().filter(e => new Date(e.endedAt).toDateString() === new Date().toDateString());
+            const todays = MY.filter(c => c.status === 'active' && c.days.includes(wd)).sort((a, b) => a.time.localeCompare(b.time));
+            $('todaySub').textContent = todays.length ? `${todays.length} class${todays.length > 1 ? 'es' : ''} today` : 'No classes today';
+            $('todayList').innerHTML = todays.length ? todays.map(c => {
+                const [c1] = colors(c.code), [h, m] = c.time.split(':').map(Number), st = h * 60 + m;
+                const live = mySessions().find(s => s.code === c.code), done = ended.find(e => e.code === c.code);
+                const right = live ? `<span class="tag live-tag">LIVE · ${live.checkins.length}/${enrolled(c.code).length}</span>`
+                    : done ? `<span class="tag st-present">Done · ${done.present + done.late}/${done.present + done.late + done.absent}</span>`
+                    : st + c.dur < nowMin ? '<span class="tag st-absent">Missed</span>'
+                    : `<button class="btn-primary-grad" data-start="${c.code}"><i class="bi bi-broadcast"></i> Start</button>`;
+                return `<div class="tl-item"><div class="tl-time">${c.time}<small>${endTime(c)}</small></div>
+                    <div class="tl-card" style="--c1:${c1}"><div style="min-width:0"><b>${c.code} · ${esc(c.name)}</b><small>${esc(c.room)} · ${enrolled(c.code).length} students</small></div><div class="r">${right}</div></div></div>`;
+            }).join('') : `<div class="empty py-4"><i class="bi bi-cup-hot"></i><b>No classes today</b>${nx ? `Next: ${nx.c.code} ${['Today', 'Tomorrow'].includes(nx.day) ? nx.day.toLowerCase() : 'on ' + nx.day} at ${nx.c.time}.` : ''}</div>`;
+
+            // trend (weekly)
+            const weeks = [];
+            for (let w = 4; w >= 0; w--) {
+                const from = new Date(today.getTime() - (w * 7 + 6) * DAY), to = new Date(today.getTime() - w * 7 * DAY);
+                const rs = RECORDS.filter(r => { const d = parse(r.date); return d >= from && d <= to; });
+                weeks.push({ label: w === 0 ? 'This week' : `${w} wk ago`, all: rateOf(rs), per: MY.map(c => rateOf(rs.filter(r => r.code === c.code))) });
+            }
+            const ds = [{ label: 'All my courses', data: weeks.map(w => w.all && +w.all.toFixed(1)), borderColor: '#4338ca', backgroundColor: 'rgba(67,56,202,.12)', fill: true, tension: .35, borderWidth: 3, pointRadius: 3 }]
+                .concat(MY.map((c, i) => ({ label: c.code, data: weeks.map(w => w.per[i] && +w.per[i].toFixed(1)), borderColor: colors(c.code)[1], borderDash: [5, 4], tension: .35, borderWidth: 2, pointRadius: 0, fill: false })));
+            if (trendChart) trendChart.destroy();
+            Chart.defaults.font.family = '"Plus Jakarta Sans", system-ui, sans-serif'; Chart.defaults.color = '#8a92b2';
+            trendChart = new Chart($('trendChart'), {
+                type: 'line', data: { labels: weeks.map(w => w.label), datasets: ds },
+                options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8, padding: 14 } }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y}%` } } },
+                    scales: { y: { min: 40, max: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(27,34,64,.06)' } }, x: { grid: { display: false } } } }
+            });
+
+            // at risk
+            const risk = studentStats().sort((a, b) => a.pct - b.pct).filter(x => x.pct < MIN_ATT + 5).slice(0, 6);
+            $('riskSub').textContent = `Students under ${MIN_ATT}% (or close to it) in your courses`;
+            $('riskList').innerHTML = risk.length ? risk.map(x => { const s = STU[x.sid]; return `
+                <div class="col-md-6 px-2"><div class="risk"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                <div style="min-width:0"><b>${esc(s.name)}</b><small>${x.code} · ${x.absent} absent of ${x.total}</small></div>
+                <span class="pct" style="color:${pctCol(x.pct)}">${x.pct.toFixed(0)}%</span>
+                <button class="btn-glass" data-warn="${s.id}|${x.code}" title="Send a warning"><i class="bi bi-send"></i></button></div></div>`; }).join('')
+                : '<div class="empty py-3"><i class="bi bi-emoji-smile"></i><b>Everyone is on track</b>No students below the requirement.</div>';
+            renderLiveBanner();
+        }
+        function setv(id, v) { const el = $(id); if (el.textContent !== String(v)) { el.textContent = v; if (el.dataset.init === '1') fx.bump(el); el.dataset.init = '1'; } }
+        function renderLiveBanner() {
+            const s = mySessions()[0];
+            $('liveBanner').classList.toggle('show', !!s);
+            if (!s) return;
+            $('lbTitle').textContent = `${s.code} attendance is live`;
+            $('lbSub').textContent = `${s.checkins.length}/${enrolled(s.code).length} checked in · ${mmss(endsAt(s) - Date.now())} left · ${COURSE[s.code].room}`;
+        }
+        $('v-dashboard').addEventListener('click', e => {
+            const st = e.target.closest('[data-start]'); if (st) { startCode = st.dataset.start; return go('attendance'); }
+            const w = e.target.closest('[data-warn]');
+            if (w) {
+                const [sid, code] = w.dataset.warn.split('|'), s = STU[sid], x = studentStats(code).find(y => y.sid === sid);
+                sendAnnouncement({ type: 'urgent', to: 'student:' + sid, toLabel: s.name, title: `Low attendance in ${code}`, msg: `Your attendance in ${code} is ${x.pct.toFixed(0)}%, below the ${MIN_ATT}% requirement. Please attend regularly.`, channels: ['app', 'push'] });
+                fx.success(w, ''); ui.toast(`Warning sent to ${s.name}.`);
+            }
+        });
+
+        /* ================= MY CLASSES ================= */
+        function renderClasses() {
+            $('classGrid').innerHTML = MY.length ? MY.map(c => {
+                const [c1, c2] = colors(c.code), rs = RECORDS.filter(r => r.code === c.code), p = rateOf(rs), live = mySessions().find(s => s.code === c.code);
+                const sessCount = new Set(rs.map(r => r.date)).size;
+                return `<div class="c-card" style="--c1:${c1};--c2:${c2}">
+                    <div class="c-top"><div class="code"><span>${c.code} · ${c.cr} CREDITS</span>${live ? '<span class="lv">● LIVE</span>' : ''}</div><h4>${esc(c.name)}</h4><small>Semester ${c.sem} · ${esc(c.dept)}</small></div>
+                    <div class="c-body"><div><b>${enrolled(c.code).length}</b><span>Students</span></div><div><b style="color:${p === null ? 'inherit' : pctCol(p)}">${p === null ? '—' : p.toFixed(0) + '%'}</b><span>Attendance</span></div><div><b>${sessCount}</b><span>Sessions</span></div></div>
+                    <div class="c-line"><i class="bi bi-clock"></i> ${c.days.map(d => DAYN[d]).join(' / ')} · ${c.time}–${endTime(c)}</div>
+                    <div class="c-line"><i class="bi bi-geo-alt"></i> ${esc(c.room)} · ${esc(zoneOf(c.zone).name)}</div>
+                    <div class="c-foot"><button class="btn-primary-grad" data-start="${c.code}"><i class="bi bi-broadcast"></i> ${live ? 'Open session' : 'Take attendance'}</button><button class="btn-glass" data-course="${c.code}"><i class="bi bi-people"></i> Details</button></div>
+                </div>`;
+            }).join('') : '<div class="empty glass panel"><i class="bi bi-journal-x"></i><b>No courses assigned yet</b>Ask the admin to assign your courses.</div>';
+            fx.enter('#classGrid .c-card');
+        }
+        $('classGrid').addEventListener('click', e => {
+            const st = e.target.closest('[data-start]'); if (st) { startCode = st.dataset.start; return go('attendance'); }
+            const d = e.target.closest('[data-course]'); if (d) openCourse(d.dataset.course);
+        });
+        let cdCode = null;
+        function openCourse(code, tab = 'students') {
+            cdCode = code;
+            const c = COURSE[code], [c1, c2] = colors(code);
+            $('cdTitle').textContent = `${code} · ${c.name}`;
+            $('cdSub').textContent = `${c.days.map(d => DAYN[d]).join(' / ')} ${c.time}–${endTime(c)} · ${c.room}`;
+            const stats = studentStats(code).sort((a, b) => a.pct - b.pct);
+            const sess = {}; RECORDS.filter(r => r.code === code).forEach(r => (sess[r.date] = sess[r.date] || []).push(r));
+            const sessions_ = Object.entries(sess).sort((a, b) => b[0].localeCompare(a[0]));
+            $('cdBody').innerHTML = `
+                <div class="seg p-tabs" id="cdTabs"><button data-t="students"><i class="bi bi-people"></i> Students (${stats.length})</button><button data-t="sessions"><i class="bi bi-clock-history"></i> Sessions (${sessions_.length})</button><button data-t="info"><i class="bi bi-info-circle"></i> Info</button></div>
+                <div class="p-sec" data-sec="students">
+                    <input class="f-input mb-2" id="cdSearch" placeholder="Search students">
+                    <div class="lst" id="cdStudents">${stats.map(x => { const s = STU[x.sid]; return `
+                        <div class="stu" data-name="${esc(s.name.toLowerCase() + ' ' + s.roll.toLowerCase())}"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                        <div style="min-width:0"><b>${esc(s.name)}</b><small>${esc(s.roll)} · ${x.present} P · ${x.late} L · ${x.absent} A${x.excused ? ' · ' + x.excused + ' E' : ''}</small></div>
+                        <div class="act" style="align-items:center"><div class="pct-cell" style="width:110px"><div class="pct-bar"><span style="width:${x.pct}%;background:${barCol(x.pct)}"></span></div><b>${x.pct.toFixed(0)}%</b></div></div></div>`; }).join('') || '<div class="empty py-3">No students enrolled.</div>'}</div>
+                </div>
+                <div class="p-sec" data-sec="sessions">
+                    ${sessions_.map(([dk, rs]) => { const p = rateOf(rs) ?? 0, n = { present: 0, late: 0, absent: 0, excused: 0 }; rs.forEach(r => n[r.status]++); return `
+                        <div class="stu" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)">
+                        <div style="width:96px;flex-shrink:0"><b style="font-size:13px">${fmtDate(parse(dk))}</b></div>
+                        <div class="pct-cell" style="flex:1"><div class="pct-bar"><span style="width:${p}%;background:${barCol(p)}"></span></div><b>${p.toFixed(0)}%</b></div>
+                        <small class="text-muted" style="white-space:nowrap">${n.present} P · ${n.late} L · ${n.absent} A</small></div>`; }).join('') || '<div class="empty py-3">No sessions yet.</div>'}
+                </div>
+                <div class="p-sec" data-sec="info">
+                    <div class="info-row"><span>Description</span><b style="font-weight:500">${esc(c.desc) || '—'}</b></div>
+                    <div class="info-row"><span>Credits / semester</span><b>${c.cr} credit hours · Semester ${c.sem}</b></div>
+                    <div class="info-row"><span>Room</span><b>${esc(c.room)}</b></div>
+                    <div class="info-row"><span>Geofence</span><b>${esc(zoneOf(c.zone).name)} (${zoneOf(c.zone).radius} m)</b></div>
+                    <div class="info-row"><span>Capacity</span><b>${enrolled(code).length} / ${c.capacity}</b></div>
+                </div>`;
+            document.querySelectorAll('#cdTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === tab));
+            document.querySelectorAll('#cdBody .p-sec').forEach(s => s.classList.toggle('active', s.dataset.sec === tab));
+            $('shade').classList.add('show'); $('courseDrawer').classList.add('show'); $('courseDrawer').setAttribute('aria-hidden', 'false');
+        }
+        $('courseDrawer').addEventListener('click', e => { const t = e.target.closest('#cdTabs button'); if (t) openCourse(cdCode, t.dataset.t); });
+        $('courseDrawer').addEventListener('input', e => {
+            if (e.target.id !== 'cdSearch') return;
+            const q = e.target.value.toLowerCase(); document.querySelectorAll('#cdStudents .stu').forEach(r => r.style.display = r.dataset.name.includes(q) ? '' : 'none');
+        });
+        function closeDrawer() { $('shade').classList.remove('show'); $('courseDrawer').classList.remove('show'); $('courseDrawer').setAttribute('aria-hidden', 'true'); }
+        $('shade').addEventListener('click', closeDrawer);
+        document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeDrawer));
+
+        /* ================= TAKE ATTENDANCE ================= */
+        let selSession = null, startCode = null, listTab = 'in', qrTimer = null, qrObj = null, qrBigObj = null;
+        function renderAttendance() {
+            const mine = mySessions();
+            if (selSession && !mine.some(s => s.id === selSession)) selSession = null;
+            if (startCode) { const ex = mine.find(s => s.code === startCode); if (ex) { selSession = ex.id; startCode = null; } }
+            if (!selSession && mine.length && !startCode) selSession = mine[0].id;
+            const s = mine.find(x => x.id === selSession);
+            const tabs = mine.length > 1 || (mine.length && startCode) ? `<div class="sess-tabs">${mine.map(x => `<button class="${x.id === selSession ? 'btn-primary-grad' : 'btn-glass'}" data-sel="${x.id}" style="padding:7px 12px;font-size:13px;box-shadow:none">● ${x.code}</button>`).join('')}<button class="btn-glass" data-new style="padding:7px 12px;font-size:13px;box-shadow:none"><i class="bi bi-plus-lg"></i> New session</button></div>` : '';
+            $('attArea').innerHTML = tabs + (s && !startCode ? liveHtml(s) : startHtml());
+            if (s && !startCode) { renderLists(s); if (s.qr) startQr(s); } else { clearInterval(qrTimer); }
+        }
+        function startHtml() {
+            if (!PERMS.startSessions) return `<div class="panel glass"><div class="empty"><i class="bi bi-lock"></i><b>You can't start sessions</b>The admin has turned this permission off for your account.</div></div>`;
+            const liveCodes = new Set(sessions.map(x => x.code));
+            const avail = MY.filter(c => c.status === 'active' && !liveCodes.has(c.code));
+            if (!avail.length) return `<div class="panel glass"><div class="empty"><i class="bi bi-broadcast"></i><b>Nothing to start</b>${MY.length ? 'All your courses already have a live session.' : 'No courses are assigned to you yet.'}</div></div>`;
+            const wd = new Date().getDay(), suggested = startCode && avail.some(c => c.code === startCode) ? startCode : (avail.find(c => c.days.includes(wd)) || avail[0]).code;
+            return `<div class="row g-3 g-xl-4"><div class="col-xl-7"><div class="panel glass start-card">
+                <div class="panel-head"><div><h3><i class="bi bi-broadcast"></i> Start an attendance session</h3><p>Students enrolled in the course check in from inside the geofence.</p></div></div>
+                <div class="field"><label class="f-label" for="sCourse">Course</label><select class="f-select" id="sCourse">${avail.map(c => `<option value="${c.code}" ${c.code === suggested ? 'selected' : ''}>${c.code} · ${esc(c.name)} — ${esc(c.room)}${c.days.includes(wd) ? ' (today)' : ''}</option>`).join('')}</select></div>
+                <div class="row g-2">
+                    <div class="col-6 field"><label class="f-label" for="sDur">Open for</label><select class="f-select" id="sDur">${[10, 15, 20, 30].map(m => `<option value="${m}" ${m === (S.sessionDuration || 15) ? 'selected' : ''}>${m} minutes</option>`).join('')}</select></div>
+                    <div class="col-6 field"><label class="f-label" for="sLate">Late after</label><select class="f-select" id="sLate">${[5, 10, 15].map(m => `<option value="${m}" ${m === (S.lateAfter ?? 10) ? 'selected' : ''}>${m} minutes</option>`).join('')}</select></div>
+                </div>
+                <div class="row-between field"><div><b style="font-size:13.5px">Require classroom QR code</b><div class="f-help mt-0">Show a rotating QR on the projector — stops students checking in from outside.</div></div><label class="switch-t"><input type="checkbox" id="sQr" ${S.qrVerify ? 'checked' : ''}><span></span></label></div>
+                <button class="btn-primary-grad w-100" id="sGo" style="padding:13px"><i class="bi bi-broadcast"></i> Start session now</button>
+            </div></div>
+            <div class="col-xl-5"><div class="panel glass"><div class="panel-head"><div><h3><i class="bi bi-lightbulb"></i> How it works</h3></div></div>
+                <div class="info-row"><span>1</span><b style="font-weight:500;text-align:left;flex:1;margin-left:10px">Start the session at the beginning of class.</b></div>
+                <div class="info-row"><span>2</span><b style="font-weight:500;text-align:left;flex:1;margin-left:10px">Students open GeoAttend — their GPS must be inside the classroom geofence.</b></div>
+                <div class="info-row"><span>3</span><b style="font-weight:500;text-align:left;flex:1;margin-left:10px">Watch check-ins arrive. Mark anyone with a phone problem manually.</b></div>
+                <div class="info-row"><span>4</span><b style="font-weight:500;text-align:left;flex:1;margin-left:10px">When it closes, everyone who didn't check in is marked absent.</b></div>
+            </div></div></div>`;
+        }
+        function liveHtml(s) {
+            const c = COURSE[s.code], [c1, c2] = colors(s.code), n = enrolled(s.code).length, k = s.checkins.length, p = n ? Math.round(k / n * 100) : 0;
+            return `<div class="att-grid">
+                <div>
+                    <div class="countdown" style="--c1:${c1};--c2:${c2}">
+                        <small>${s.code} · ${esc(c.room)} · started ${clock(s.startedAt)}</small>
+                        <div class="big" id="aLeft">${mmss(endsAt(s) - Date.now())}</div>
+                        <small>left · closes at ${clock(endsAt(s))} · late after ${s.lateAfter} min</small>
+                        <div class="ring2" id="aRing" style="--p:${p}%"><div><div><b id="aCount">${k}/${n}</b><small>checked in</small></div></div></div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn-glass flex-fill" id="aExt"><i class="bi bi-plus-circle"></i> 5 min</button>
+                        <button class="btn-glass flex-fill" id="aRemind"><i class="bi bi-bell"></i> Remind</button>
+                        <button class="btn-danger-soft flex-fill" id="aEnd"><i class="bi bi-stop-circle"></i> End</button>
+                    </div>
+                    ${s.qr ? `<div class="qr-card"><b style="font-size:14px">Classroom QR code</b><div class="f-help mt-0">Changes every ${QR_INT / 1000} s</div><div id="qr"></div><div class="tok" id="qrTok"></div><div class="qbar"><span id="qrBar"></span></div>
+                        <button class="btn-primary-grad w-100" id="qrFullBtn"><i class="bi bi-fullscreen"></i> Show on projector</button></div>` : ''}
+                </div>
+                <div class="panel glass">
+                    <div class="seg p-tabs" id="aTabs"><button data-t="in">Checked in <span class="cnt" id="cIn"></span></button><button data-t="out">Not yet <span class="cnt" id="cOut"></span></button><button data-t="flag">Flagged <span class="cnt" id="cFlag"></span></button></div>
+                    <div class="lst lst-wrap" id="aList"></div>
+                </div>
+            </div>`;
+        }
+        function renderLists(s, newSid) {
+            if (!$('aList')) return;
+            const list = enrolled(s.code), inIds = new Set(s.checkins.map(x => x.sid));
+            $('cIn').textContent = s.checkins.length; $('cOut').textContent = list.length - s.checkins.length; $('cFlag').textContent = s.flags.length;
+            document.querySelectorAll('#aTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === listTab));
+            const p = list.length ? Math.round(s.checkins.length / list.length * 100) : 0;
+            $('aCount').textContent = `${s.checkins.length}/${list.length}`; $('aRing').style.setProperty('--p', p + '%');
+            let html = '';
+            if (listTab === 'in') html = [...s.checkins].sort((a, b) => b.at - a.at).map(x => { const st = STU[x.sid]; return st ? `
+                <div class="stu ${x.sid === newSid ? 'new' : ''}"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                <div style="min-width:0"><b>${esc(st.name)} <span class="tag ${x.status === 'late' ? 'st-late' : 'st-present'}">${x.status === 'late' ? 'Late' : 'On time'}</span></b><small>${clock(x.at)} · ${x.manual ? 'marked by you' : `${x.dist} m away · ±${x.acc} m`}</small></div>
+                <div class="act"><button class="btn-glass" data-undo="${st.id}">Undo</button></div></div>` : ''; }).join('') || '<div class="empty py-4"><i class="bi bi-hourglass"></i><b>Waiting for check-ins…</b>Ask students to open GeoAttend.</div>';
+            else if (listTab === 'out') html = list.filter(st => !inIds.has(st.id)).sort((a, b) => a.name.localeCompare(b.name)).map(st => `
+                <div class="stu"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                <div style="min-width:0"><b>${esc(st.name)}</b><small>${esc(st.roll)}${st.device ? '' : ' · no phone registered'}</small></div>
+                <div class="act"><button class="btn-glass" data-mark="present" data-sid="${st.id}">Present</button><button class="btn-glass" data-mark="late" data-sid="${st.id}">Late</button></div></div>`).join('') || '<div class="empty py-4"><i class="bi bi-emoji-smile"></i><b>Everyone is here!</b></div>';
+            else html = [...s.flags].sort((a, b) => b.at - a.at).map(f => { const st = STU[f.sid]; return st ? `
+                <div class="stu"><div class="ini" style="background:${pcolor(st.id)}">${initials(st.name)}</div>
+                <div style="min-width:0"><b>${esc(st.name)} <span class="tag st-flag">${esc(f.reason)}</span></b><small>${clock(f.at)} · ${f.dist} m from the room · blocked</small></div>
+                <div class="act">${inIds.has(st.id) ? '' : `<button class="btn-glass" data-mark="present" data-sid="${st.id}" title="The student is really in class">Allow</button>`}</div></div>` : ''; }).join('') || '<div class="empty py-4"><i class="bi bi-shield-check"></i><b>No suspicious attempts</b></div>';
+            $('aList').innerHTML = html;
+        }
+        $('attArea').addEventListener('click', async e => {
+            const sel = e.target.closest('[data-sel]'); if (sel) { selSession = sel.dataset.sel; startCode = null; return renderAttendance(); }
+            if (e.target.closest('[data-new]')) { startCode = '__new'; selSession = null; return renderAttendance(); }
+            if (e.target.closest('#sGo')) return startSession();
+            const s = sessions.find(x => x.id === selSession); if (!s) return;
+            const tab = e.target.closest('#aTabs button'); if (tab) { listTab = tab.dataset.t; return renderLists(s); }
+            const mk = e.target.closest('[data-mark]');
+            if (mk) {
+                if (s.checkins.some(x => x.sid === mk.dataset.sid)) return;
+                s.checkins.push({ sid: mk.dataset.sid, at: Date.now(), status: mk.dataset.mark, dist: 0, acc: 0, manual: true }); saveSessions(); renderLists(s);
+                return ui.toast(`${STU[mk.dataset.sid].name} marked ${mk.dataset.mark}.`);
+            }
+            const un = e.target.closest('[data-undo]');
+            if (un) { s.checkins = s.checkins.filter(x => x.sid !== un.dataset.undo); saveSessions(); renderLists(s); return ui.toast(`${STU[un.dataset.undo].name}'s check-in removed.`, 'info'); }
+            if (e.target.closest('#aExt')) { s.duration += 5; saveSessions(); renderAttendance(); return ui.toast(`Extended — closes at ${clock(endsAt(s))}.`); }
+            if (e.target.closest('#aRemind')) {
+                const waiting = enrolled(s.code).filter(st => !s.checkins.some(x => x.sid === st.id));
+                if (!waiting.length) return ui.toast('Everyone has already checked in.', 'info');
+                sendAnnouncement({ type: 'reminder', to: 'course:' + s.code, toLabel: `${waiting.length} ${s.code} students not checked in`, title: `${s.code} attendance closes soon`, msg: `Check in now — the session closes at ${clock(endsAt(s))}.`, channels: ['app', 'push'] });
+                fx.success(e.target.closest('#aRemind'), 'Sent'); return ui.toast(`Reminder sent to ${waiting.length} student${waiting.length === 1 ? '' : 's'}.`);
+            }
+            if (e.target.closest('#aEnd')) {
+                const n = enrolled(s.code).length, k = s.checkins.length;
+                if (!await ui.confirm(`End ${s.code} session?`, `${k} of ${n} students checked in. The other ${n - k} will be marked absent.`, 'End session')) return;
+                return endSession(s.id);
+            }
+            if (e.target.closest('#qrFullBtn')) return openQrFull(s);
+        });
+        function startSession() {
+            const code = $('sCourse').value;
+            if (!enrolled(code).length) return ui.toast(`${code} has no active students enrolled.`, 'error');
+            const s = GA.newSession(COURSE[code], { duration: +$('sDur').value, lateAfter: +$('sLate').value, qr: $('sQr').checked, by: ME.name });
+            sessions = GA.loadSessions(); sessions.push(s); saveSessions();
+            selSession = s.id; startCode = null; listTab = 'in';
+            ui.toast(`${code} session started — open for ${s.duration} minutes.`);
+            refreshLiveUI(true);
+        }
+        function startQr(s) {
+            clearInterval(qrTimer); qrObj = null;
+            const tokFor = () => (GA.hash(s.id + Math.floor(Date.now() / QR_INT)).toString(36).toUpperCase() + 'XXXXXX').slice(0, 6);
+            const draw = () => {
+                const tok = tokFor(), text = `GEOATTEND:${s.id}:${tok}`;
+                if ($('qrTok')) $('qrTok').textContent = tok.replace(/(...)/, '$1 ');
+                if ($('qr') && window.QRCode) { if (!qrObj || !$('qr').firstChild) { $('qr').innerHTML = ''; qrObj = new QRCode($('qr'), { text, width: 154, height: 154, correctLevel: QRCode.CorrectLevel.M }); } else qrObj.makeCode(text); }
+                if ($('qrFull').classList.contains('show') && window.QRCode) { if (!qrBigObj || !$('qrBig').firstChild) { $('qrBig').innerHTML = ''; qrBigObj = new QRCode($('qrBig'), { text, width: 600, height: 600, correctLevel: QRCode.CorrectLevel.M }); } else qrBigObj.makeCode(text); $('qfTok').textContent = tok.replace(/(...)/, '$1 '); }
+            };
+            draw();
+            let last = Math.floor(Date.now() / QR_INT);
+            qrTimer = setInterval(() => {
+                const now = Math.floor(Date.now() / QR_INT); if (now !== last) { last = now; draw(); }
+                const pct = 100 - (Date.now() % QR_INT) / QR_INT * 100; if ($('qrBar')) $('qrBar').style.width = pct + '%';
+            }, 1000);
+            startQr.redraw = draw;
+        }
+        function openQrFull(s) {
+            $('qfTitle').textContent = `${s.code} · ${COURSE[s.code].name} — ${COURSE[s.code].room}`;
+            $('qrBig').innerHTML = ''; qrBigObj = null;
+            $('qrFull').classList.add('show');
+            startQr.redraw && startQr.redraw();
+            updateQrFull();
+            if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+        }
+        function updateQrFull() {
+            const s = sessions.find(x => x.id === selSession); if (!s || !$('qrFull').classList.contains('show')) return;
+            $('qfCount').textContent = `${s.checkins.length}/${enrolled(s.code).length} checked in`;
+            $('qfLeft').textContent = `${mmss(endsAt(s) - Date.now())} left`;
+        }
+        function closeQrFull() { $('qrFull').classList.remove('show'); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }
+        $('qrClose').addEventListener('click', closeQrFull);
+
+        // timers: countdowns, auto-close, live banner, sidebar dot
+        function refreshLiveUI(full) {
+            const has = mySessions().length > 0;
+            $('navAtt').classList.toggle('has-live', has);
+            if (current === 'attendance' && full) renderAttendance();
+            if (current === 'dashboard') full ? renderDashboard() : renderLiveBanner();
+            if (current === 'classes' && full) renderClasses();
+        }
+        setInterval(() => {
+            mySessions().forEach(s => { if (endsAt(s) <= Date.now() && AUTO_CLOSE) endSession(s.id, true); });
+            const s = sessions.find(x => x.id === selSession);
+            if (s && $('aLeft')) $('aLeft').textContent = mmss(endsAt(s) - Date.now());
+            updateQrFull();
+            if (current === 'dashboard') renderLiveBanner();
+            if (current === 'timetable') updateNextCard();
+        }, 1000);
+
+        // demo simulation: students check in to MY live sessions
+        let simOn = true;
+        $('simToggle').addEventListener('change', e => { simOn = e.target.checked; ui.toast(simOn ? 'Demo check-ins on.' : 'Demo check-ins paused.', 'info'); });
+        function simulate() {
+            if (!simOn || document.hidden) return;
+            sessions = GA.loadSessions();   // pick up changes made by the admin in another tab
+            const open = mySessions().filter(s => endsAt(s) > Date.now() && enrolled(s.code).some(st => !s.checkins.some(x => x.sid === st.id)));
+            if (!open.length) return refreshLiveUI(false);
+            const s = open[Math.floor(Math.random() * open.length)], z = zoneOf(s.zone);
+            const waiting = enrolled(s.code).filter(st => !s.checkins.some(x => x.sid === st.id));
+            const st = waiting[Math.floor(Math.random() * waiting.length)], at = Date.now();
+            if (Math.random() < .1) s.flags.push({ sid: st.id, at, reason: FLAGS[Math.floor(Math.random() * FLAGS.length)], dist: Math.round(z.radius + 15 + Math.random() * 90) });
+            else s.checkins.push({ sid: st.id, at, status: at - s.startedAt > s.lateAfter * MIN ? 'late' : 'present', dist: Math.round(3 + Math.random() * z.radius * .85), acc: Math.round(5 + Math.random() * 20) });
+            saveSessions();
+            if (current === 'attendance' && s.id === selSession) renderLists(s, st.id);
+            refreshLiveUI(false);
+        }
+        (function loop() { simulate(); setTimeout(loop, 2500 + Math.random() * 2500); })();
+
+        /* ================= RECORDS ================= */
+        $('rCourse').innerHTML = '<option value="">All my courses</option>' + MY.map(c => `<option value="${c.code}">${c.code} · ${esc(c.name)}</option>`).join('');
+        const openSess = new Set();
+        const canEdit = r => PERMS.editAttendance && (Date.now() - (GA.sessionStart(r.date, COURSE[r.code]) + COURSE[r.code].dur * MIN)) < EDIT_HOURS * 3600 * 1000;
+        function renderRecords() {
+            $('recSub').textContent = `Sessions of your courses. You can correct records up to ${EDIT_HOURS} hours after a class${PERMS.editAttendance ? '' : ' (editing is turned off for your account)'}.`;
+            $('editNote').innerHTML = PERMS.editAttendance ? `<i class="bi bi-info-circle"></i> Older records: ask the admin to correct them.` : '<i class="bi bi-lock"></i> Editing disabled by admin';
+            $('recExport').style.display = PERMS.exportReports ? '' : 'none';
+            const code = $('rCourse').value, days = +$('rRange').value, st = $('rStatus').value;
+            const from = key(new Date(today.getTime() - days * DAY));
+            const rows = RECORDS.filter(r => (!code || r.code === code) && r.date >= from);
+            const groups = {};
+            rows.forEach(r => (groups[r.date + '|' + r.code] = groups[r.date + '|' + r.code] || []).push(r));
+            const list = Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+            $('recList').innerHTML = list.length ? list.map(([k, rs]) => {
+                const [dk, cd] = k.split('|'), c = COURSE[cd], [c1, c2] = colors(cd), p = rateOf(rs);
+                const n = { present: 0, late: 0, absent: 0, excused: 0 }; rs.forEach(r => n[r.status]++);
+                const shown = rs.filter(r => !st || r.status === st).sort((a, b) => STU[a.sid].name.localeCompare(STU[b.sid].name));
+                if (st && !shown.length) return '';
+                const editable = canEdit(rs[0]);
+                return `<div class="sess ${openSess.has(k) || st ? 'open' : ''}" data-sess="${k}" style="--c1:${c1};--c2:${c2}">
+                    <div class="sess-h"><div class="cc">${cd}</div>
+                        <div style="min-width:0"><b>${esc(c.name)}</b><small>${fmtDate(parse(dk))} · ${c.time} · ${esc(c.room)} ${editable ? '' : '· <span class="lock"><i class="bi bi-lock"></i> locked</span>'}</small></div>
+                        <div class="counts"><span class="tag st-present">${n.present}</span><span class="tag st-late">${n.late}</span><span class="tag st-absent">${n.absent}</span>${n.excused ? `<span class="tag st-excused">${n.excused}</span>` : ''}</div>
+                        <div class="pct-cell"><div class="pct-bar"><span style="width:${p}%;background:${barCol(p)}"></span></div><b>${p === null ? '—' : p.toFixed(0) + '%'}</b></div>
+                        <i class="bi bi-chevron-down chev"></i></div>
+                    <div class="sess-b lst">${shown.map(r => { const s = STU[r.sid]; return `
+                        <div class="stu"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div>
+                        <div style="min-width:0"><b>${esc(s.name)} <span class="tag ${STATUS[r.status][1]}">${STATUS[r.status][0]}</span>${r.edited ? ' <span class="tag edited-tag" title="Corrected"><i class="bi bi-pencil"></i></span>' : ''}</b><small>${esc(s.roll)}${r.at ? ' · ' + clock(r.at) : ''}${r.dist != null ? ' · ' + r.dist + ' m' : ''}${r.method === 'manual' ? ' · manual' : ''}</small></div>
+                        <div class="act">${editable ? `<button class="btn-glass" data-edit="${r.id}"><i class="bi bi-pencil"></i> Change</button>` : ''}</div></div>`; }).join('')}</div>
+                </div>`;
+            }).join('') || '<div class="empty"><i class="bi bi-funnel"></i><b>No matching records</b></div>' : '<div class="empty"><i class="bi bi-clipboard-x"></i><b>No sessions in this period</b></div>';
+        }
+        ['rCourse', 'rRange', 'rStatus'].forEach(id => $(id).addEventListener('change', () => { renderRecords(); fx.enter('#recList .sess'); }));
+        $('recList').addEventListener('click', e => {
+            const ed = e.target.closest('[data-edit]'); if (ed) return openEdit(ed.dataset.edit);
+            const h = e.target.closest('.sess-h'); if (h) { const box = h.parentElement; box.classList.toggle('open'); box.classList.contains('open') ? openSess.add(box.dataset.sess) : openSess.delete(box.dataset.sess); }
+        });
+        let editId = null;
+        function openEdit(id) {
+            const r = RECORDS.find(x => x.id === id); editId = id;
+            $('emTitle').textContent = `Correct ${STU[r.sid].name}`;
+            $('emText').textContent = `${r.code} · ${fmtDate(parse(r.date))} — currently ${STATUS[r.status][0]}. The admin will see your change and reason in the audit trail.`;
+            document.querySelectorAll('#emStatus input').forEach(i => i.checked = i.value === r.status);
+            $('emReason').value = ''; $('emReason').classList.remove('invalid');
+            $('editModal').classList.add('show'); setTimeout(() => $('emReason').focus(), 60);
+        }
+        $('emCancel').addEventListener('click', () => $('editModal').classList.remove('show'));
+        $('editModal').addEventListener('click', e => { if (e.target.id === 'editModal') $('editModal').classList.remove('show'); });
+        $('emSave').addEventListener('click', () => {
+            const r = RECORDS.find(x => x.id === editId), ns = document.querySelector('#emStatus input:checked').value, reason = $('emReason').value.trim();
+            if (ns === r.status) return ui.toast('Choose a different status.', 'info');
+            if (reason.length < 5) { $('emReason').classList.add('invalid'); fx.shake($('emReason')); return ui.toast('Please write a short reason.', 'error'); }
+            edits = GA.loadEdits();
+            (edits[editId] = edits[editId] || []).push({ status: ns, prev: r.status, reason, at: Date.now(), by: ME.name });
+            GA.saveEdits(edits); rebuildRecords();
+            $('editModal').classList.remove('show');
+            renderRecords();
+            ui.toast(`${STU[r.sid].name} changed to ${STATUS[ns][0]}.`);
+        });
+        $('recExport').addEventListener('click', () => {
+            const code = $('rCourse').value, from = key(new Date(today.getTime() - +$('rRange').value * DAY));
+            const rows = RECORDS.filter(r => (!code || r.code === code) && r.date >= from && (!$('rStatus').value || r.status === $('rStatus').value)).sort((a, b) => b.date.localeCompare(a.date));
+            downloadCsv(`my-attendance-${key(new Date())}.csv`, [['Date', 'Course', 'Student', 'Roll No', 'Status', 'Check-in', 'Distance (m)', 'Corrected'], ...rows.map(r => [r.date, r.code, STU[r.sid].name, STU[r.sid].roll, STATUS[r.status][0], r.at ? clock(r.at) : '', r.dist ?? '', r.edited ? 'Yes' : ''])]);
+            ui.toast(`${rows.length} records exported.`);
+        });
+        function downloadCsv(name, rows) {
+            const csv = rows.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+
+        /* ================= TIMETABLE ================= */
+        function renderTimetable() {
+            const times = [...new Set(MY.map(c => c.time))].sort(), wd = new Date().getDay();
+            let html = '<div class="tt"><div></div>' + [1, 2, 3, 4, 5].map(d => `<div class="h ${d === wd ? 'today' : ''}">${DAYN[d]}${d === wd ? ' · Today' : ''}</div>`).join('');
+            times.forEach(t => {
+                html += `<div class="t">${t}</div>`;
+                for (let d = 1; d <= 5; d++) {
+                    const c = MY.find(x => x.time === t && x.days.includes(d));
+                    const [c1, c2] = c ? colors(c.code) : [];
+                    html += `<div class="cell">${c ? `<div class="blk" style="--c1:${c1};--c2:${c2}"><b>${c.code}</b>${esc(c.name)}<br>${esc(c.room)} · ${c.time}–${endTime(c)}</div>` : ''}</div>`;
+                }
+            });
+            $('ttArea').innerHTML = times.length ? html + '</div>' : '<div class="empty"><i class="bi bi-calendar-x"></i><b>No classes scheduled</b></div>';
+            updateNextCard(true);
+        }
+        function updateNextCard(force) {
+            const nx = nextClassInfo();
+            if (!nx) { if (force) $('nextCard').innerHTML = ''; return; }
+            const [c1, c2] = colors(nx.c.code), ms = nx.at - Date.now();
+            const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000);
+            const txt = ms > 86400000 ? `${Math.floor(ms / 86400000)}d ${h % 24}h` : `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+            if (force || !$('ncLeft')) $('nextCard').innerHTML = `<div class="next-card" style="--c1:${c1};--c2:${c2}"><i class="bi bi-alarm" style="font-size:30px"></i><div style="flex:1"><small style="opacity:.9">Next class · ${nx.day} at ${nx.c.time}</small><b style="display:block;font-size:17px">${nx.c.code} · ${esc(nx.c.name)} — ${esc(nx.c.room)}</b></div><div class="text-end"><small style="opacity:.9">starts in</small><div class="big" id="ncLeft">${txt}</div></div></div>`;
+            else $('ncLeft').textContent = txt;
+        }
+
+        /* ================= REPORTS ================= */
+        $('repCourse').innerHTML = '<option value="">All my courses</option>' + MY.map(c => `<option value="${c.code}">${c.code} · ${esc(c.name)}</option>`).join('');
+        let repChart, repDonut;
+        function renderReports() {
+            const code = $('repCourse').value, rows = RECORDS.filter(r => !code || r.code === code);
+            const p = rateOf(rows), sessCount = new Set(rows.map(r => r.date + r.code)).size, stats = studentStats(code);
+            const n = { present: 0, late: 0, absent: 0, excused: 0 }; rows.forEach(r => n[r.status]++);
+            const kpi = (l, v, i, col, sub) => `<div class="col-6 col-lg-3"><div class="stat glass" style="--tint:${col};--tint-bg:${col}1f"><div class="stat-icon"><i class="bi ${i}"></i></div><div><div class="label">${l}</div><div class="value">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div></div>`;
+            $('repKpis').innerHTML = kpi('Attendance', p === null ? '—' : p.toFixed(1) + '%', 'bi-graph-up-arrow', '#10b981', 'present + late') + kpi('Sessions', sessCount, 'bi-broadcast', '#4338ca') + kpi('Late check-ins', n.late, 'bi-alarm', '#f59e0b') + kpi('Below ' + MIN_ATT + '%', stats.filter(x => x.pct < MIN_ATT).length, 'bi-exclamation-triangle', '#f43f5e', 'students');
+            const sess = {}; rows.forEach(r => (sess[r.date + '|' + r.code] = sess[r.date + '|' + r.code] || []).push(r));
+            const last = Object.entries(sess).sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
+            if (repChart) repChart.destroy(); if (repDonut) repDonut.destroy();
+            repChart = new Chart($('repChart'), { type: 'bar',
+                data: { labels: last.map(([k]) => { const [dk, cd] = k.split('|'); return `${parse(dk).getDate()}/${parse(dk).getMonth() + 1} ${code ? '' : cd}`; }),
+                    datasets: [{ data: last.map(([, rs]) => +(rateOf(rs) ?? 0).toFixed(1)), backgroundColor: last.map(([, rs]) => pctCol(rateOf(rs) ?? 0)), borderRadius: 8, maxBarThickness: 34 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y}% attended` } } }, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(27,34,64,.06)' } }, x: { grid: { display: false } } } } });
+            repDonut = new Chart($('repDonut'), { type: 'doughnut',
+                data: { labels: ['Present', 'Late', 'Absent', 'Excused'], datasets: [{ data: [n.present, n.late, n.absent, n.excused], backgroundColor: ['#14b8a6', '#f59e0b', '#f43f5e', '#0284c7'], borderColor: '#fff', borderWidth: 3 }] },
+                options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'right', labels: { usePointStyle: true, padding: 14 } } } } });
+            renderRepTable();
+        }
+        function renderRepTable() {
+            const q = $('repSearch').value.toLowerCase(), code = $('repCourse').value;
+            const stats = studentStats(code).filter(x => !q || (STU[x.sid].name + ' ' + STU[x.sid].roll).toLowerCase().includes(q)).sort((a, b) => a.pct - b.pct);
+            $('repTable').innerHTML = stats.map(x => { const s = STU[x.sid], tag = x.pct >= 85 ? ['Good', 'st-present'] : x.pct >= MIN_ATT ? ['Warning', 'st-late'] : ['Low', 'st-absent']; return `
+                <tr><td><div class="person"><div class="ini" style="background:${pcolor(s.id)}">${initials(s.name)}</div><div><b>${esc(s.name)}</b><small>${esc(s.roll)}</small></div></div></td>
+                <td>${x.code}</td><td>${x.total}</td><td>${x.present}</td><td>${x.late}</td><td>${x.absent}</td>
+                <td><div class="pct-cell"><div class="pct-bar"><span style="width:${x.pct}%;background:${barCol(x.pct)}"></span></div><b>${x.pct.toFixed(0)}%</b></div></td>
+                <td><span class="tag ${tag[1]}">${tag[0]}</span></td></tr>`; }).join('') || '<tr><td colspan="8"><div class="empty py-3">No students.</div></td></tr>';
+        }
+        $('repCourse').addEventListener('change', renderReports);
+        $('repSearch').addEventListener('input', renderRepTable);
+        $('repPrint').addEventListener('click', () => window.print());
+        $('repExport').addEventListener('click', () => {
+            if (!PERMS.exportReports) return ui.toast('Exporting is turned off for your account.', 'error');
+            const stats = studentStats($('repCourse').value).sort((a, b) => a.pct - b.pct);
+            downloadCsv(`my-report-${$('repCourse').value || 'all'}-${key(new Date())}.csv`, [['Student', 'Roll No', 'Course', 'Classes', 'Present', 'Late', 'Absent', 'Excused', 'Attendance %'], ...stats.map(x => [STU[x.sid].name, STU[x.sid].roll, x.code, x.total, x.present, x.late, x.absent, x.excused, x.pct.toFixed(1)])]);
+            fx.success($('repExport'), 'Exported'); ui.toast(`${stats.length} rows exported.`);
+        });
+
+        /* ================= ANNOUNCEMENTS ================= */
+        const annKey = 'ga_teacher_ann_' + ME.id;
+        function sendAnnouncement(a) {
+            const list = readLS(annKey, []); list.unshift({ id: Date.now(), at: Date.now(), ...a }); writeLS(annKey, list);
+            try { const d = JSON.parse(localStorage.getItem('ga_notifications')); if (d && Array.isArray(d.sent)) { d.sent.push({ id: Date.now(), type: a.type, title: a.title, msg: a.msg, audience: 'custom', audienceLabel: `${a.toLabel} (by ${ME.name})`, channels: a.channels, at: Date.now() }); localStorage.setItem('ga_notifications', JSON.stringify(d)); } } catch {}
+        }
+        function renderAnnouncements() {
+            $('aTo').innerHTML = `<option value="all">All my students (${myStudents().length})</option>` + MY.map(c => `<option value="course:${c.code}">${c.code} · ${esc(c.name)} (${enrolled(c.code).length})</option>`).join('') +
+                MY.map(c => { const n = studentStats(c.code).filter(x => x.pct < MIN_ATT).length; return n ? `<option value="risk:${c.code}">${c.code} — students below ${MIN_ATT}% (${n})</option>` : ''; }).join('');
+            const list = readLS(annKey, []);
+            $('annSub').textContent = `${list.length} sent`;
+            const IC = { announcement: ['bi-megaphone', '#4338ca'], reminder: ['bi-alarm', '#f59e0b'], urgent: ['bi-exclamation-triangle', '#f43f5e'] };
+            $('annList').innerHTML = list.length ? list.map(a => `<div class="ann"><div class="ic" style="color:${IC[a.type][1]};background:${IC[a.type][1]}1a"><i class="bi ${IC[a.type][0]}"></i></div>
+                <div style="min-width:0;flex:1"><b>${esc(a.title)}</b><p>${esc(a.msg)}</p><div class="meta"><span class="tag" style="background:rgba(27,34,64,.06);color:var(--ink-2)"><i class="bi bi-people"></i> ${esc(a.toLabel)}</span><span class="tag" style="background:rgba(27,34,64,.06);color:var(--ink-2)">${new Date(a.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div></div>
+                <button class="del" data-del="${a.id}" title="Delete" aria-label="Delete"><i class="bi bi-trash3"></i></button></div>`).join('') : '<div class="empty"><i class="bi bi-megaphone"></i><b>No announcements yet</b>Messages you send appear here.</div>';
+        }
+        $('aMsg').addEventListener('input', () => $('aCount').textContent = `${$('aMsg').value.length} / 250`);
+        $('aSend').addEventListener('click', () => {
+            const t = $('aTitle').value.trim(), m = $('aMsg').value.trim(), to = $('aTo').value;
+            if (!t) { $('aTitle').classList.add('invalid'); fx.shake($('aTitle')); return ui.toast('Please enter a title.', 'error'); }
+            if (!m) { $('aMsg').classList.add('invalid'); fx.shake($('aMsg')); return ui.toast('Please write a message.', 'error'); }
+            const label = $('aTo').selectedOptions[0].textContent;
+            sendAnnouncement({ type: document.querySelector('input[name="aType"]:checked').value, to, toLabel: label, title: t, msg: m, channels: ['app', ...[...document.querySelectorAll('#v-announcements .chips input:checked')].map(i => i.value)] });
+            $('aTitle').value = ''; $('aMsg').value = ''; $('aCount').textContent = '0 / 250';
+            renderAnnouncements(); fx.enter('#annList .ann:first-child');
+            fx.success($('aSend'), 'Sent'); ui.toast(`Announcement sent to ${label}.`);
+        });
+        ['aTitle', 'aMsg'].forEach(id => $(id).addEventListener('input', () => $(id).classList.remove('invalid')));
+        $('annList').addEventListener('click', e => { const d = e.target.closest('[data-del]'); if (!d) return; writeLS(annKey, readLS(annKey, []).filter(a => a.id !== +d.dataset.del)); renderAnnouncements(); ui.toast('Removed from history.', 'info'); });
+
+        /* ================= PROFILE ================= */
+        function renderProfile() {
+            const load = MY.reduce((a, c) => a + c.cr, 0);
+            $('pCard').innerHTML = `<div class="ini" style="background:${pcolor(ME.id)}">${initials(ME.name)}</div><div><b style="font-size:20px">${esc(ME.name)}</b><div class="text-muted">${esc(ME.desig)} · ${esc(ME.dept)}</div>
+                <div class="mt-2 d-flex gap-2 flex-wrap"><span class="tag st-present">${esc(ME.emp)}</span><span class="tag" style="background:rgba(67,56,202,.1);color:var(--primary)">${MY.length} courses · ${load} credit hours</span></div></div>`;
+            $('pName').value = ME.name; $('pEmail').value = ME.email; $('pPhone').value = ME.phone || ''; $('pOffice').value = ME.office || ''; $('pQual').value = ME.qual || '';
+            const P = [['startSessions', 'Start attendance sessions'], ['editAttendance', `Correct attendance (within ${EDIT_HOURS} h)`], ['manageGeofences', 'Manage geofences'], ['exportReports', 'Export reports']];
+            $('permList').innerHTML = P.map(([k, l]) => `<div class="perm-row"><span>${l}</span><span class="tag ${PERMS[k] ? 'st-present' : 'st-absent'}"><i class="bi ${PERMS[k] ? 'bi-check-lg' : 'bi-x-lg'}"></i> ${PERMS[k] ? 'Allowed' : 'Not allowed'}</span></div>`).join('');
+        }
+        $('pSave').addEventListener('click', () => {
+            const phone = $('pPhone').value.trim();
+            if (phone && !/^\+?[\d\s-]{10,16}$/.test(phone)) { $('pPhone').classList.add('invalid'); return ui.toast('Please enter a valid phone number.', 'error'); }
+            $('pPhone').classList.remove('invalid');
+            teachers = GA.loadTeachers(); const t = teachers.find(x => x.id === ME.id);
+            Object.assign(t, { phone, office: $('pOffice').value.trim(), qual: $('pQual').value.trim() }); Object.assign(ME, t);
+            GA.saveTeachers(teachers); fx.success($('pSave'), 'Saved'); ui.toast('Profile updated.');
+        });
+        $('pwSave').addEventListener('click', () => {
+            const overrides = readLS('ga_pw_reset', {}), signup = readLS('ga_users', []).find(u => (u.email || '').toLowerCase() === ME.email.toLowerCase());
+            const current = overrides[ME.email] || signup?.password || 'Teacher@123';   // demo default, see DEMO_ACCOUNTS.md
+            const cur = $('pwCur').value, nw = $('pwNew').value;
+            [$('pwCur'), $('pwNew'), $('pwNew2')].forEach(i => i.classList.remove('invalid'));
+            if (cur !== current) { $('pwCur').classList.add('invalid'); return ui.toast('Current password is incorrect.', 'error'); }
+            if (nw.length < 8 || !(/[a-z]/.test(nw) && /[A-Z]/.test(nw) && /\d/.test(nw))) { $('pwNew').classList.add('invalid'); return ui.toast('Use at least 8 characters with upper and lower case letters and a number.', 'error'); }
+            if (nw !== $('pwNew2').value) { $('pwNew2').classList.add('invalid'); return ui.toast('Passwords do not match.', 'error'); }
+            overrides[ME.email] = nw; writeLS('ga_pw_reset', overrides);
+            [$('pwCur'), $('pwNew'), $('pwNew2')].forEach(i => i.value = ''); fx.success($('pwSave'), 'Updated'); ui.toast('Password updated — use it next time you sign in.');
+        });
+
+        /* ---------- Search (top bar) ---------- */
+        $('topSearch').addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const q = e.target.value.trim().toLowerCase(); if (!q) return;
+            const c = MY.find(x => (x.code + ' ' + x.name).toLowerCase().includes(q));
+            if (c) { go('classes'); return setTimeout(() => openCourse(c.code), 150); }
+            const s = myStudents().find(x => (x.name + ' ' + x.roll).toLowerCase().includes(q));
+            if (s) { go('reports'); return setTimeout(() => { $('repSearch').value = s.name; renderRepTable(); }, 150); }
+            ui.toast(`Nothing found for "${e.target.value}".`, 'info');
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape') return;
+            if ($('qrFull').classList.contains('show')) return closeQrFull();
+            if ($('editModal').classList.contains('show')) return $('editModal').classList.remove('show');
+            if (!document.querySelector('.tb-pop.show') && !document.querySelector('.modal-bg.show')) closeDrawer();
+        });
+
+        /* ================= INIT ================= */
+        refreshLiveUI(false);
+        show(location.hash.slice(1) || 'dashboard');
+        fx.enter('#v-' + current + ' > *');
+    </script>
+</body>
+</html>

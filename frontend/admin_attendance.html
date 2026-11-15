@@ -323,34 +323,8 @@
 
         /* ---------- Build records ---------- */
         // past 35 days, generated from the timetable + enrolled students (same result every time)
-        function generated() {
-            const out = [];
-            for (let back = 1; back <= 35; back++) {
-                const d = new Date(today.getTime() - back * DAY), dk = key(d), wd = d.getDay();
-                courses.forEach(c => {
-                    if (!c.days.includes(wd)) return;
-                    const start = sessionStart(dk, c.code), z = zoneOf(c.zone);
-                    const dayMood = GA.rng(GA.hash(dk + c.code))() * .1 - .05;
-                    students.forEach(s => {
-                        if (s.status === 'pending' || !s.courses.includes(c.code)) return;
-                        const tot = s.att.present + s.att.late + s.att.absent;
-                        const rate = tot ? (s.att.present + s.att.late) / tot : .85, lateRate = tot ? s.att.late / tot : .06;
-                        const r = GA.rng(GA.hash(s.id + c.code + dk)), x = r();
-                        let status = x < rate + dayMood - lateRate ? 'present' : x < rate + dayMood ? 'late' : 'absent';
-                        if (status === 'absent' && r() < .12) status = 'excused';
-                        const m = r();
-                        const method = status === 'absent' || status === 'excused' ? null : m < .04 ? 'manual' : c.code === 'CS301' ? 'qr' : 'gps';
-                        const at = status === 'present' ? start + r() * LATE_AFTER * MIN : status === 'late' ? start + (LATE_AFTER + r() * (DUR - LATE_AFTER + 5)) * MIN : null;
-                        out.push({
-                            id: `${dk}|${c.code}|${s.id}`, date: dk, code: c.code, sid: s.id, status, at, method,
-                            dist: method && method !== 'manual' ? Math.round(3 + r() * z.radius * .85) : null,
-                            acc: method && method !== 'manual' ? Math.round(5 + r() * 22) : null,
-                            zone: c.zone, device: s.device?.model || null, source: 'history'
-                        });
-                    });
-                });
-            }
-            return out;
+        function generated() {   // shared generator in assets/data.js (same records on the teacher portal)
+            return GA.historyRecords(35);
         }
         // today: check-ins from open sessions on the Live Sessions page
         function fromLive() {
@@ -369,7 +343,7 @@
         let ALL = [];
         function rebuild() {
             const map = new Map();
-            [...BASE, ...fromLive(), ...manual].forEach(r => map.set(r.id, { ...r }));
+            [...BASE, ...GA.loadSessionRecords(), ...fromLive(), ...manual].forEach(r => map.set(r.id, { ...r }));
             map.forEach(r => { const h = edits[r.id]; if (h && h.length) { r.original = r.status; r.status = h[h.length - 1].status; r.edited = true; } });
             ALL = [...map.values()];
         }

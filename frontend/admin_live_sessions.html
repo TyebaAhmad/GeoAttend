@@ -486,7 +486,7 @@
             const n = enrolled(s.code).length, k = s.checkins.length, late = s.checkins.filter(c => c.status === 'late').length;
             if (!auto && !await ui.confirm(`End ${s.code} session?`, `${k} of ${n} students checked in (${late} late). The other ${n - k} will be marked absent.`, 'End session')) return;
             sessions = sessions.filter(x => x.id !== id);
-            ended.unshift({ code: s.code, startedAt: s.startedAt, endedAt: Date.now(), present: k - late, late, absent: n - k, flags: s.flags.length });
+            ended.unshift(GA.finishSession(s, s.by));   // also saves each student's result as a record (shared data)
             persist();
             if (monitorId === id) closeMonitor();
             $('feed').insertAdjacentHTML('afterbegin', sysFeed(`${s.code} session ${auto ? 'closed automatically' : 'ended'}`, `${k}/${n} checked in · ${n - k} marked absent`, 'end'));

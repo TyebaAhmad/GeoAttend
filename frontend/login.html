@@ -584,21 +584,15 @@
 
     <div class="toast" id="toast"><i class="bi bi-info-circle"></i><span></span></div>
 
+    <script src="assets/data.js"></script>
+    <script src="assets/auth.js"></script>
     <script>
         /*
-         * FRONTEND-ONLY DEMO AUTH
-         * There is no backend yet, so accounts are checked in the browser.
-         * This is NOT secure and must be replaced by the real backend login API.
-         * Demo accounts are documented in frontend/DEMO_ACCOUNTS.md.
+         * FRONTEND-ONLY DEMO AUTH — the account logic lives in assets/auth.js.
+         * There is no backend yet, so accounts are checked in the browser. This is NOT secure and will be
+         * replaced by the real backend login API. Demo accounts are documented in frontend/DEMO_ACCOUNTS.md.
          */
-        const DEMO_USERS = [
-            { username: 'admin', email: 'admin@geoattend.edu', password: 'Admin@123', role: 'admin', name: 'Admin' }
-        ];
-        const DASHBOARDS = {
-            admin: 'admin_dashboard.html',
-            teacher: null,   // teacher_dashboard.html — coming soon
-            student: null    // student_dashboard.html — coming soon
-        };
+        const DASHBOARDS = AUTH.HOME;
 
         const $ = id => document.getElementById(id);
         $('year').textContent = new Date().getFullYear();
@@ -628,29 +622,8 @@
         function readJSON(key, fallback) {
             try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; }
         }
-        // Registered users + demo users; demo-user passwords can be overridden by a reset (stored in ga_pw_reset).
-        function getUsers() {
-            const overrides = readJSON('ga_pw_reset', {});
-            const demo = DEMO_USERS.map(u => overrides[u.email] ? { ...u, password: overrides[u.email] } : u);
-            return demo.concat(readJSON('ga_users', []));
-        }
-        function findUser(identifier) {
-            const v = identifier.trim().toLowerCase();
-            return getUsers().find(u => [u.username, u.email, u.id].filter(Boolean).map(x => x.toLowerCase()).includes(v));
-        }
-        function updatePassword(user, newPass) {
-            try {
-                if (DEMO_USERS.some(d => d.email === user.email)) {
-                    const o = readJSON('ga_pw_reset', {}); o[user.email] = newPass;
-                    localStorage.setItem('ga_pw_reset', JSON.stringify(o));
-                } else {
-                    const users = readJSON('ga_users', []);
-                    const u = users.find(x => x.email === user.email);
-                    if (u) u.password = newPass;
-                    localStorage.setItem('ga_users', JSON.stringify(users));
-                }
-            } catch {}
-        }
+        // Accounts, password reset and sessions come from the shared assets/auth.js
+        const getUsers = AUTH.users, findUser = AUTH.findUser, updatePassword = AUTH.updatePassword;
         function setLoading(btn, on, label) {
             btn.disabled = on;
             btn.innerHTML = on ? '<span class="spinner"></span> Please wait…' : label + ' <i class="bi bi-arrow-right"></i>';
@@ -702,11 +675,13 @@
                 setLoading($('loginBtn'), false, 'Sign In');
 
                 if (!match) { markInvalid(passIn); return showAlert('loginError', 'Invalid credentials for the selected role.'); }
+                if (match.status === 'pending') return showAlert('loginError', 'Your account is waiting for admin approval. You can sign in once it is approved.');
+                if (match.status === 'inactive') return showAlert('loginError', 'This account has been deactivated. Please contact the administrator.');
 
                 try {
                     if ($('remember').checked) localStorage.setItem('ga_remember', JSON.stringify({ user: userIn.value.trim(), role }));
                     else localStorage.removeItem('ga_remember');
-                    sessionStorage.setItem('ga_session', JSON.stringify({ name: match.name, role: match.role, at: Date.now() }));
+                    sessionStorage.setItem('ga_session', JSON.stringify({ name: match.name, role: match.role, teacherId: match.teacherId, email: match.email, at: Date.now() }));
                 } catch {}
 
                 const target = DASHBOARDS[role];
@@ -917,9 +892,18 @@
                 showTab('signin');
                 $('r-' + role).checked = true;
                 $('loginUser').value = email;
-                showAlert('loginSuccess', 'Account created! Sign in with your new credentials.');
+                if (role === 'teacher') { showAlert('loginSuccess', 'Request sent! An admin must approve your teacher account before you can sign in.'); }
+                else showAlert('loginSuccess', 'Account created! Sign in with your new credentials.');
             }, 700);
         });
+
+        /* ---------- Links from other pages (?role=…, ?forgot=1&u=…) — e.g. teacher portal logout ---------- */
+        (function fromLink() {
+            const q = new URLSearchParams(location.search), role = q.get('role');
+            if (['admin', 'teacher', 'student'].includes(role)) { $('r-' + role).checked = true; $('r-' + role).dispatchEvent(new Event('change')); }
+            if (q.get('u')) $('loginUser').value = q.get('u');
+            if (q.get('forgot') === '1') $('forgot').click();
+        })();
     </script>
 </body>
 </html>

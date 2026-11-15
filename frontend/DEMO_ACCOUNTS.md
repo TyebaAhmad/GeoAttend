@@ -3,15 +3,25 @@
 There is no backend yet, so `login.html` checks accounts in the browser.
 **This is for demo/testing only and is not secure.** It will be replaced by the backend login API.
 
-| Role  | Username | Email               | Password    | Opens                  |
-|-------|----------|---------------------|-------------|------------------------|
-| Admin | `admin`  | admin@geoattend.edu | `Admin@123` | `admin_dashboard.html` |
+| Role    | Username / ID | Email                      | Password      | Opens                  |
+|---------|---------------|----------------------------|---------------|------------------------|
+| Admin   | `admin`       | admin@geoattend.edu        | `Admin@123`   | `admin_dashboard.html` |
+| Teacher | `EMP-1001`    | sana.malik@university.edu  | `Teacher@123` | `teacher_portal.html`  |
 
-## Teachers and students
+## Teachers
 
-- Register from the **Sign Up** tab on `login.html`.
-- Registered accounts are saved in the browser's `localStorage` (key `ga_users`) for demo purposes only.
-- They can sign in with their email (or roll number / employee ID). Their dashboards are not built yet, so they see a "coming soon" message.
+- Teachers sign in on **`login.html`** by choosing the **Teacher** role (the teacher portal's Logout opens it with Teacher pre-selected).
+- **Every active teacher** in the demo data can sign in with their university email
+  or employee ID and the demo password `Teacher@123`. Dr. Sana Malik (above) teaches CS301; Dr. Ayesha Khan
+  (`ayesha.khan@university.edu`) teaches two courses (AI402, AI310).
+- Teachers who **sign up** use the password they chose. Until the admin approves them (Admin → Teachers → Approve)
+  the login page says the account is waiting for approval. Inactive teachers cannot sign in.
+- A teacher can change their password in **Teacher portal → My Profile** (saved in `localStorage` key `ga_pw_reset`).
+
+## Students
+
+- Register from the **Sign Up** tab on `login.html`. Registered accounts are saved in `localStorage` (key `ga_users`).
+- The student portal is not built yet, so students see a "coming soon" message after signing in.
 
 ## Forgot password (demo)
 

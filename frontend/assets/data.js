@@ -157,13 +157,101 @@
     function loadZones() { return read('ga_geofences') || sampleZones(); }
     function saveZones(list) { return write('ga_geofences', list); }
 
+    /* ---------- Attendance records ---------- */
+    const DAY = 864e5, MIN = 6e4;
+    const dateKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    function sessionStart(dk, course) { const [h, m] = course.time.split(':').map(Number); const d = new Date(dk + 'T00:00:00'); d.setHours(h, m, 0, 0); return d.getTime(); }
+
+    // Past class sessions (default 35 days) generated from the timetable + enrolled students — same result every time.
+    function historyRecords(days = 35) {
+        const s = settings(), LATE = s.lateAfter ?? 10, DUR = s.sessionDuration || 15;
+        const courses = loadCourses(), students = loadStudents(), zones = loadZones();
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const out = [];
+        for (let back = 1; back <= days; back++) {
+            const d = new Date(today.getTime() - back * DAY), dk = dateKey(d), wd = d.getDay();
+            courses.forEach(c => {
+                if (!c.days.includes(wd)) return;
+                const start = sessionStart(dk, c), z = zones.find(x => x.id === c.zone) || zones[0];
+                const dayMood = rng(hash(dk + c.code))() * .1 - .05;
+                students.forEach(st => {
+                    if (st.status === 'pending' || !st.courses.includes(c.code)) return;
+                    const tot = st.att.present + st.att.late + st.att.absent;
+                    const rate = tot ? (st.att.present + st.att.late) / tot : .85, lateRate = tot ? st.att.late / tot : .06;
+                    const r = rng(hash(st.id + c.code + dk)), x = r();
+                    let status = x < rate + dayMood - lateRate ? 'present' : x < rate + dayMood ? 'late' : 'absent';
+                    if (status === 'absent' && r() < .12) status = 'excused';
+                    const m = r();
+                    const method = status === 'absent' || status === 'excused' ? null : m < .04 ? 'manual' : c.code === 'CS301' ? 'qr' : 'gps';
+                    const at = status === 'present' ? start + r() * LATE * MIN : status === 'late' ? start + (LATE + r() * (DUR - LATE + 5)) * MIN : null;
+                    out.push({
+                        id: `${dk}|${c.code}|${st.id}`, date: dk, code: c.code, sid: st.id, status, at, method,
+                        dist: method && method !== 'manual' ? Math.round(3 + r() * z.radius * .85) : null,
+                        acc: method && method !== 'manual' ? Math.round(5 + r() * 22) : null,
+                        zone: c.zone, device: st.device?.model || null, source: 'history'
+                    });
+                });
+            });
+        }
+        return out;
+    }
+    // Corrections ({ recordId: [ {status, prev, reason, at, by} ] }) and manual records
+    function loadEdits() { try { return JSON.parse(localStorage.getItem('ga_att_edits')) || {}; } catch { return {}; } }
+    function saveEdits(e) { try { localStorage.setItem('ga_att_edits', JSON.stringify(e)); } catch {} }
+
+    /* ---------- Live attendance sessions (shared by admin Live Sessions and the teacher portal) ---------- */
+    // session: { id, code, zone, startedAt, duration, lateAfter, qr, checkins:[{sid, at, status, dist, acc, manual}], flags:[{sid, at, reason, dist}], by }
+    function loadSessions() {
+        const codes = liveCodes(), courses = loadCourses();
+        let list = read('ga_sessions');
+        if (!list) list = [];
+        list = list.filter(x => codes.includes(x.code) && courses.some(c => c.code === x.code));
+        codes.forEach(code => {
+            const c = courses.find(x => x.code === code);
+            if (c && !list.some(x => x.code === code)) list.push(newSession(c, { startedAt: Date.now() - 3 * MIN }));
+        });
+        return list;
+    }
+    function saveSessions(list) { write('ga_sessions', list); saveLive(list.map(x => x.code)); }
+    function newSession(course, o = {}) {
+        const s = settings();
+        return { id: 'ls' + Date.now() + Math.floor(Math.random() * 1000), code: course.code, zone: o.zone || course.zone || 'z1', startedAt: o.startedAt || Date.now(),
+            duration: o.duration || s.sessionDuration || 15, lateAfter: o.lateAfter ?? (s.lateAfter ?? 10), qr: o.qr ?? !!s.qrVerify, checkins: [], flags: [], by: o.by || 'Admin' };
+    }
+    function loadEnded() { return read('ga_sessions_ended') || []; }
+    function saveEnded(list) { write('ga_sessions_ended', list); }
+
+    // When a session closes, every enrolled student gets a record: present / late from their check-in, absent otherwise.
+    // Saved in "ga_att_sessions" so Attendance Records (admin + teacher) show today's classes too.
+    function loadSessionRecords() { return read('ga_att_sessions') || []; }
+    function finishSession(sess, by) {
+        const students = loadStudents(), dk = dateKey(new Date(sess.startedAt));
+        const enrolled = students.filter(st => st.courses.includes(sess.code) && st.status === 'active');
+        const recs = enrolled.map(st => {
+            const ci = sess.checkins.find(x => x.sid === st.id);
+            return {
+                id: `${dk}|${sess.code}|${st.id}`, date: dk, code: sess.code, sid: st.id, status: ci ? ci.status : 'absent', at: ci ? ci.at : null,
+                method: ci ? (ci.manual ? 'manual' : sess.qr ? 'qr' : 'gps') : null, dist: ci && !ci.manual ? ci.dist : null, acc: ci && !ci.manual ? ci.acc : null,
+                zone: sess.zone, device: st.device?.model || null, source: 'session'
+            };
+        });
+        const all = loadSessionRecords().filter(r => !recs.some(n => n.id === r.id)).concat(recs);
+        write('ga_att_sessions', all);
+        const late = sess.checkins.filter(c => c.status === 'late').length, k = sess.checkins.length;
+        const summary = { code: sess.code, startedAt: sess.startedAt, endedAt: Date.now(), present: k - late, late, absent: enrolled.length - k, flags: sess.flags.length, by: by || sess.by || 'Admin' };
+        saveEnded([summary].concat(loadEnded()));
+        return summary;
+    }
+
     window.GA = {
-        hash, rng, settings,
+        hash, rng, settings, dateKey, sessionStart,
         DEPARTMENTS, DEPT_CODES, DEPT_COURSES, SHARED,
         loadCourses, saveCourses, courseNames,
         liveCodes, saveLive,
         loadTeachers, saveTeachers,
         loadStudents, saveStudents,
-        loadZones, saveZones
+        loadZones, saveZones,
+        historyRecords, loadEdits, saveEdits,
+        loadSessions, saveSessions, newSession, loadEnded, saveEnded, loadSessionRecords, finishSession
     };
 })();

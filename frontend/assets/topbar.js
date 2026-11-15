@@ -89,28 +89,32 @@
     }
     function renderProfile() {
         const s = read('ga_settings', {});
-        const name = s.adminName || 'Admin';
-        const email = s.adminEmail || 'admin@geoattend.edu';
-        const title = s.adminTitle || 'Super Administrator';
-        const words = name.trim().split(/\s+/);
+        // A page can describe its own user (e.g. the teacher portal sets window.GA_PROFILE); otherwise it's the admin.
+        const p = window.GA_PROFILE || {
+            name: s.adminName || 'Admin', email: s.adminEmail || 'admin@geoattend.edu', title: s.adminTitle || 'Super Administrator', photo: s.photo, icon: 'bi-shield-check',
+            links: [
+                ['admin_settings.html#profile', 'bi-person', 'My Profile'],
+                ['admin_settings.html#general', 'bi-gear', 'Account Settings'],
+                ['admin_notifications.html', 'bi-bell', 'Notifications', unreadCount()],
+                ['admin_settings.html#security', 'bi-shield-lock', 'Security']
+            ]
+        };
+        const name = p.name;
+        const words = name.replace(/^(Dr|Prof|Mr|Ms|Mrs|Engr)\.\s*/, '').trim().split(/\s+/);
         const initials = (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
-        const unread = unreadCount();
         profilePop.innerHTML = `
             <div class="tb-head">
-                <div class="tb-ava" ${s.photo ? `style="background-image:url('${s.photo}')"` : ''}>${s.photo ? '' : esc(initials)}</div>
+                <div class="tb-ava" ${p.photo ? `style="background-image:url('${p.photo}')"` : ''}>${p.photo ? '' : esc(initials)}</div>
                 <div style="min-width:0">
                     <b>${esc(name)}</b>
-                    <small>${esc(email)}</small>
-                    <span class="tb-role"><i class="bi bi-shield-check"></i> ${esc(title)}</span>
+                    <small>${esc(p.email)}</small>
+                    <span class="tb-role"><i class="bi ${p.icon || 'bi-person-badge'}"></i> ${esc(p.title)}</span>
                 </div>
             </div>
             <nav class="tb-menu" role="menu">
-                <a href="admin_settings.html#profile" role="menuitem"><i class="bi bi-person"></i> My Profile <i class="bi bi-chevron-right tb-arrow"></i></a>
-                <a href="admin_settings.html#general" role="menuitem"><i class="bi bi-gear"></i> Account Settings <i class="bi bi-chevron-right tb-arrow"></i></a>
-                <a href="admin_notifications.html" role="menuitem"><i class="bi bi-bell"></i> Notifications ${unread ? `<span class="tb-count">${unread}</span>` : ''}</a>
-                <a href="admin_settings.html#security" role="menuitem"><i class="bi bi-shield-lock"></i> Security <i class="bi bi-chevron-right tb-arrow"></i></a>
+                ${p.links.map(([href, icon, label, count]) => `<a href="${href}" role="menuitem"><i class="bi ${icon}"></i> ${esc(label)} ${count ? `<span class="tb-count">${count}</span>` : '<i class="bi bi-chevron-right tb-arrow"></i>'}</a>`).join('')}
                 <hr>
-                <a href="login.html" class="tb-logout" role="menuitem" id="tbLogout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+                <a href="${p.logout || 'login.html'}" class="tb-logout" role="menuitem" id="tbLogout"><i class="bi bi-box-arrow-right"></i> Logout</a>
             </nav>`;
         profilePop.querySelector('#tbLogout').addEventListener('click', () => {
             try { sessionStorage.removeItem('ga_session'); } catch (e) {}
