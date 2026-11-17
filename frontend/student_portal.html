@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#4338ca">
+    <title>Student Portal | GeoAttend</title>
+
+    <!-- Demo route guard: only a signed-in student may view this page (replace with backend auth later) -->
+    <script>
+        (function () {
+            let s = null;
+            try { s = JSON.parse(sessionStorage.getItem('ga_session')); } catch (e) {}
+            if (!s || s.role !== 'student') location.replace('login.html?role=student');
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="assets/admin.css">
+    <link rel="stylesheet" href="assets/fx.css">
+    <link rel="stylesheet" href="assets/topbar.css">
+    <link rel="stylesheet" href="assets/people.css">
+
+    <style>
+        .view { display: none; }
+        .view.active { display: block; animation: fxIn .4s ease; }
+        .st-present { color: #047857; background: rgba(16,185,129,.12); }
+        .st-late { color: #b45309; background: rgba(245,158,11,.14); }
+        .st-absent { color: #be123c; background: rgba(244,63,94,.10); }
+        .st-excused { color: #0369a1; background: rgba(2,132,199,.12); }
+        .live-tag { color: #047857; background: rgba(16,185,129,.12); }
+        .live-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; }
+        .side-nav .live-dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: #10b981; animation: fxDotPulse 1.6s infinite; display: none; }
+        .side-nav a.has-live .live-dot { display: block; }
+
+        /* ---------- Home hero ---------- */
+        .hero { padding: 24px; color: #fff; position: relative; overflow: hidden; border: 0; background: linear-gradient(135deg, #4338ca, #7c3aed 55%, #0ea5e9); display: flex; gap: 22px; align-items: center; }
+        .hero::after { content: ""; position: absolute; right: -50px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,.1); }
+        .hero h2 { font-size: 25px; font-weight: 800; margin: 0 0 4px; }
+        .hero p { margin: 0; opacity: .92; font-size: 14px; }
+        .hero .grow { flex: 1; min-width: 0; position: relative; z-index: 1; }
+        .hero .pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 7px 12px; border-radius: 12px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); font-size: 13px; font-weight: 600; }
+        .big-ring { width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; position: relative; z-index: 1; background: conic-gradient(#fff var(--p), rgba(255,255,255,.22) 0); transition: background .6s; }
+        .big-ring > div { width: 106px; height: 106px; border-radius: 50%; background: rgba(30,27,75,.35); display: grid; place-items: center; text-align: center; }
+        .big-ring b { font-size: 28px; font-weight: 800; display: block; line-height: 1; }
+        .big-ring small { font-size: 11px; opacity: .9; }
+
+        /* Live check-in call to action */
+        .live-cta { display: flex; align-items: center; gap: 14px; padding: 16px; margin-bottom: 14px; border-radius: 20px; color: #fff; background: linear-gradient(135deg, #059669, #10b981 60%, #14b8a6); box-shadow: 0 18px 34px -18px rgba(5,150,105,.9); animation: fxIn .4s ease; }
+        .live-cta.done { background: linear-gradient(135deg, #e0f2fe, #ecfdf5); color: var(--ink); box-shadow: var(--shadow); border: 1px solid var(--glass-border); }
+        .live-cta .ic { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; font-size: 22px; background: rgba(255,255,255,.22); flex-shrink: 0; position: relative; }
+        .live-cta:not(.done) .ic::after { content: ""; position: absolute; inset: -4px; border-radius: 18px; border: 2px solid rgba(255,255,255,.6); animation: ping 1.8s infinite; }
+        @keyframes ping { 0% { transform: scale(.9); opacity: 1; } 100% { transform: scale(1.25); opacity: 0; } }
+        .live-cta.done .ic { background: rgba(16,185,129,.15); color: #047857; }
+        .live-cta b { display: block; font-size: 15px; }
+        .live-cta small { opacity: .92; font-size: 12.5px; }
+        .live-cta .go { margin-left: auto; background: #fff; color: #047857; border: 0; padding: 11px 16px; border-radius: 13px; font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; flex-shrink: 0; transition: transform .2s; }
+        .live-cta .go:hover { transform: scale(1.04); }
+
+        .course-mini { padding: 14px; border-radius: 16px; background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.95); height: 100%; }
+        .course-mini .row-between b { font-size: 14px; }
+        .course-mini small { color: var(--muted); font-size: 12px; }
+        .course-mini .pct-bar { margin: 8px 0 6px; height: 8px; }
+        .need { font-size: 12px; font-weight: 600; }
+        .tl-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); align-items: center; }
+        .tl-item:last-child { border-bottom: 0; }
+        .tl-time { width: 54px; flex-shrink: 0; font-weight: 800; font-size: 13.5px; }
+        .tl-time small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+        .tl-card { flex: 1; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 14px; background: rgba(255,255,255,.65); border-left: 4px solid var(--c1); min-width: 0; }
+        .tl-card b { font-size: 13.5px; display: block; }
+        .tl-card small { color: var(--muted); font-size: 12px; }
+        .tl-card .r { margin-left: auto; flex-shrink: 0; }
+
+        /* ---------- Check-in ---------- */
+        .sess-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 18px; background: rgba(255,255,255,.7); border: 1.5px solid rgba(255,255,255,.95); margin-bottom: 12px; }
+        .sess-card .cc { width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px; background: linear-gradient(135deg, var(--c1), var(--c2)); flex-shrink: 0; }
+        .sess-card b { font-size: 15px; display: block; }
+        .sess-card small { color: var(--muted); font-size: 12.5px; }
+        .sess-card .r { margin-left: auto; text-align: right; flex-shrink: 0; }
+        .flow { max-width: 620px; margin: 0 auto; }
+        .flow-head { padding: 18px; border-radius: 20px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+        .flow-head .t { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+        .loc-pick { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .loc-btn { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; border: 1.5px solid var(--line); background: rgba(255,255,255,.8); cursor: pointer; text-align: left; font: inherit; transition: all .2s; width: 100%; }
+        .loc-btn:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow); }
+        .loc-btn i { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+        .loc-btn b { display: block; font-size: 14.5px; color: var(--ink); }
+        .loc-btn small { color: var(--muted); font-size: 12.5px; }
+        .demo-lbl { font-size: 11px; font-weight: 800; letter-spacing: .8px; color: var(--muted); text-transform: uppercase; margin: 8px 2px 0; }
+        .steps { display: grid; gap: 8px; }
+        .stp { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.75); border: 1px solid var(--line); transition: all .3s; }
+        .stp .si { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-size: 15px; background: rgba(27,34,64,.06); color: var(--muted); }
+        .stp b { font-size: 13.5px; display: block; }
+        .stp small { color: var(--muted); font-size: 12px; }
+        .stp.run .si { background: rgba(67,56,202,.1); color: var(--primary); }
+        .stp.run .si i { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .stp.ok { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.06); }
+        .stp.ok .si { background: #10b981; color: #fff; animation: fxPop .4s cubic-bezier(.2,1.6,.4,1); }
+        .stp.fail { border-color: rgba(244,63,94,.4); background: rgba(244,63,94,.06); animation: fxShake .4s ease; }
+        .stp.fail .si { background: #f43f5e; color: #fff; }
+        .qr-step { padding: 14px; border-radius: 16px; background: rgba(255,255,255,.8); border: 1.5px dashed rgba(67,56,202,.4); margin-top: 10px; }
+        .scan-box { position: relative; width: 100%; max-width: 300px; aspect-ratio: 1; margin: 10px auto; border-radius: 18px; overflow: hidden; background: #0f172a; display: none; }
+        .scan-box.on { display: block; }
+        .scan-box video { width: 100%; height: 100%; object-fit: cover; }
+        .scan-box::after { content: ""; position: absolute; inset: 18%; border: 3px solid rgba(255,255,255,.85); border-radius: 16px; box-shadow: 0 0 0 999px rgba(15,23,42,.35); }
+        .scan-box .line { position: absolute; left: 18%; right: 18%; height: 2px; background: #22d3ee; top: 20%; animation: scan 2s ease-in-out infinite alternate; z-index: 2; }
+        @keyframes scan { to { top: 80%; } }
+        .code-in { display: flex; gap: 8px; }
+        .code-in input { flex: 1; text-transform: uppercase; letter-spacing: 6px; font-weight: 800; font-size: 20px; text-align: center; font-family: ui-monospace, monospace; }
+        .result { text-align: center; padding: 26px 10px; }
+        .result .ic { width: 96px; height: 96px; margin: 0 auto 16px; border-radius: 50%; display: grid; place-items: center; font-size: 44px; color: #fff; animation: fxPop .5s cubic-bezier(.2,1.4,.4,1); }
+        .result.ok .ic { background: linear-gradient(135deg, #10b981, #0d9488); box-shadow: 0 0 0 12px rgba(16,185,129,.14), 0 20px 34px -14px rgba(16,185,129,.8); }
+        .result.late .ic { background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 0 0 12px rgba(245,158,11,.14); }
+        .result.fail .ic { background: linear-gradient(135deg, #fb7185, #e11d48); box-shadow: 0 0 0 12px rgba(244,63,94,.12); }
+        .result h3 { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+        .result p { color: var(--ink-2); font-size: 14px; margin: 0 0 4px; }
+        .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 3000; overflow: hidden; }
+        .confetti i { position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity: .6; } }
+
+        /* ---------- My attendance ---------- */
+        .chips-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 6px; margin-bottom: 12px; }
+        .chips-row::-webkit-scrollbar { display: none; }
+        .calc { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 16px; margin-bottom: 14px; }
+        .calc i { font-size: 22px; }
+        .calc b { display: block; font-size: 14px; }
+        .calc small { font-size: 12.5px; opacity: .9; }
+        .heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .heat .d { aspect-ratio: 1; border-radius: 8px; font-size: 11px; font-weight: 700; display: grid; place-items: center; color: var(--muted); background: rgba(27,34,64,.035); position: relative; }
+        .heat .d.has { color: #fff; }
+        .heat .d.today { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .heat .wd { font-size: 10.5px; font-weight: 700; color: var(--muted); text-align: center; text-transform: uppercase; }
+        .rec { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+        .rec:last-child { border-bottom: 0; }
+        .rec .dt { width: 58px; flex-shrink: 0; text-align: center; border-radius: 12px; padding: 6px 0; background: rgba(27,34,64,.04); }
+        .rec .dt b { display: block; font-size: 17px; font-weight: 800; line-height: 1.1; }
+        .rec .dt small { font-size: 10.5px; color: var(--muted); text-transform: uppercase; font-weight: 700; }
+        .rec b.c { font-size: 13.5px; display: block; }
+        .rec small.m { color: var(--muted); font-size: 12px; }
+        .rec .r { margin-left: auto; flex-shrink: 0; text-align: right; }
+
+        /* Timetable */
+        .tt-wrap { overflow-x: auto; }
+        .tt { display: grid; grid-template-columns: 64px repeat(5, minmax(130px, 1fr)); gap: 6px; min-width: 720px; }
+        .tt .h { font-size: 12px; font-weight: 800; color: var(--ink-2); text-align: center; padding: 8px 0; border-radius: 10px; background: rgba(27,34,64,.04); }
+        .tt .h.today { background: rgba(67,56,202,.10); color: var(--primary); }
+        .tt .t { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 8px; }
+        .tt .cell { min-height: 66px; border-radius: 12px; background: rgba(27,34,64,.025); border: 1px dashed rgba(27,34,64,.06); padding: 4px; }
+        .tt .blk { border-radius: 10px; padding: 8px 10px; color: #fff; font-size: 12px; line-height: 1.35; background: linear-gradient(135deg, var(--c1), var(--c2)); height: 100%; }
+        .tt .blk b { display: block; font-size: 13px; }
+        .next-card { display: flex; gap: 14px; align-items: center; padding: 16px; border-radius: 18px; color: #fff; background: linear-gradient(135deg, var(--c1, #4338ca), var(--c2, #6d5ce8)); margin-bottom: 16px; }
+        .next-card .big { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+        /* Alerts */
+        .al { display: flex; gap: 12px; padding: 13px; border-radius: 16px; background: rgba(255,255,255,.55); margin-bottom: 8px; cursor: pointer; border: 1px solid transparent; transition: all .2s; position: relative; }
+        .al.unread { background: rgba(255,255,255,.88); border-color: rgba(67,56,202,.15); }
+        .al.unread::before { content: ""; position: absolute; left: -1px; top: 16px; bottom: 16px; width: 3px; border-radius: 3px; background: var(--primary); }
+        .al .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 17px; flex-shrink: 0; }
+        .al b { font-size: 14px; }
+        .al p { margin: 3px 0 4px; font-size: 13px; color: var(--ink-2); }
+        .al small { color: var(--muted); font-size: 12px; }
+
+        /* Profile */
+        .p-card { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+        .p-card .ini { width: 80px; height: 80px; border-radius: 24px; font-size: 26px; border: 3px solid #fff; box-shadow: 0 12px 26px -12px rgba(27,34,64,.5); }
+        .dev { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.7); border: 1px solid var(--line); }
+        .dev .di { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; background: rgba(20,184,166,.12); color: var(--teal); flex-shrink: 0; }
+
+        /* ---------- Phone bottom bar ---------- */
+        .bottom-nav { display: none; }
+        @media (max-width: 991.98px) {
+            .main { padding-bottom: 110px !important; }
+            .bottom-nav {
+                display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 1035;
+                padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); border-radius: 22px;
+                background: rgba(255,255,255,.88); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+                border: 1px solid var(--glass-border); box-shadow: 0 16px 40px -16px rgba(30,27,75,.45);
+            }
+            .bottom-nav a { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: var(--muted); padding: 4px 0; position: relative; }
+            .bottom-nav a i { font-size: 19px; transition: transform .2s; }
+            .bottom-nav a.active { color: var(--primary); }
+            .bottom-nav a.active i { transform: translateY(-2px); }
+            .bottom-nav a .bd { position: absolute; top: 0; right: 22%; min-width: 16px; height: 16px; border-radius: 10px; background: var(--rose); color: #fff; font-size: 9.5px; display: grid; place-items: center; padding: 0 4px; }
+            .bottom-nav a.mid i { width: 52px; height: 52px; margin-top: -26px; border-radius: 18px; display: grid; place-items: center; color: #fff; font-size: 22px; background: linear-gradient(135deg, #4338ca, #7c3aed); box-shadow: 0 12px 24px -10px rgba(67,56,202,.9); border: 3px solid #fff; }
+            .bottom-nav a.mid.live i { background: linear-gradient(135deg, #059669, #10b981); animation: fxDotPulse 1.8s infinite; }
+        }
+        @media (max-width: 575.98px) {
+            .hero { flex-direction: column-reverse; text-align: center; padding: 20px; }
+            .hero h2 { font-size: 21px; }
+            .live-cta { flex-wrap: wrap; }
+            .live-cta .go { width: 100%; justify-content: center; margin-left: 0; }
+            .sess-card { flex-wrap: wrap; }
+            .sess-card .r { width: 100%; text-align: left; margin-left: 66px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blobs"><span></span><span></span><span></span></div>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar glass" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-geo-alt-fill"></i></div>
+            <div><h1>GeoAttend</h1><small>Student Portal</small></div>
+        </div>
+        <div class="nav-label">Attendance</div>
+        <ul class="side-nav">
+            <li><a href="#home" data-v="home"><i class="bi bi-house-door"></i> Home</a></li>
+            <li><a href="#checkin" data-v="checkin" id="navCheck"><i class="bi bi-geo-alt"></i> Mark Attendance <span class="live-dot"></span></a></li>
+            <li><a href="#attendance" data-v="attendance"><i class="bi bi-clipboard-data"></i> My Attendance</a></li>
+            <li><a href="#timetable" data-v="timetable"><i class="bi bi-calendar-week"></i> Timetable</a></li>
+        </ul>
+        <div class="nav-label">Account</div>
+        <ul class="side-nav">
+            <li><a href="#alerts" data-v="alerts"><i class="bi bi-bell"></i> Notifications <span class="badge-pill" id="navBadge" style="display:none"></span></a></li>
+            <li><a href="#profile" data-v="profile"><i class="bi bi-person-circle"></i> My Profile</a></li>
+            <li><a href="login.html?role=student" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+        <header class="topbar glass">
+            <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu"><i class="bi bi-list"></i></button>
+            <div class="search"><i class="bi bi-search"></i><input type="text" id="topSearch" placeholder="Search my courses…"></div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button class="icon-btn" aria-label="Notifications" id="bellBtn"><i class="bi bi-bell"></i><span class="dot" id="bellDot" style="display:none"></span></button>
+                <div class="profile">
+                    <div class="avatar" id="topAvatar">S</div>
+                    <div><b id="topName">Student</b><small id="topRoll"></small></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- ===== HOME ===== -->
+        <section class="view" id="v-home">
+            <div id="liveCtas"></div>
+            <div class="glass hero mb-4">
+                <div class="grow">
+                    <h2 id="greet"></h2>
+                    <p id="greetSub"></p>
+                    <div class="pill" id="standing"></div>
+                </div>
+                <div class="big-ring" id="bigRing" style="--p:0%"><div><div><b id="overallPct">—</b><small>attendance</small></div></div></div>
+            </div>
+            <div class="panel glass mb-4">
+                <div class="panel-head"><div><h3><i class="bi bi-journal-bookmark"></i> My Courses</h3><p>Attendance in the last 5 weeks · requirement <span id="reqTxt"></span></p></div><button class="link-btn" data-goto="attendance">Details</button></div>
+                <div class="row g-3" id="courseMini"></div>
+            </div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-6"><div class="panel glass"><div class="panel-head"><div><h3><i class="bi bi-calendar-day"></i> <span id="todayTitle">Today</span></h3><p id="todaySub"></p></div></div><div id="todayList"></div></div></div>
+                <div class="col-xl-6"><div class="panel glass"><div class="panel-head"><div><h3><i class="bi bi-clock-history"></i> Recent</h3><p>Your latest classes</p></div><button class="link-btn" data-goto="attendance">All records</button></div><div id="recentList"></div></div></div>
+            </div>
+        </section>
+
+        <!-- ===== MARK ATTENDANCE ===== -->
+        <section class="view" id="v-checkin">
+            <div class="page-head"><div><h2>Mark Attendance</h2><p>Check in to a class that's open right now. Your location must be inside the classroom.</p></div></div>
+            <div id="checkArea"></div>
+        </section>
+
+        <!-- ===== MY ATTENDANCE ===== -->
+        <section class="view" id="v-attendance">
+            <div class="page-head"><div><h2>My Attendance</h2><p>Every class in the last 5 weeks, with GPS proof.</p></div></div>
+            <div class="chips-row chips" id="courseChips"></div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-5">
+                    <div class="panel glass mb-3">
+                        <div class="p-stats" id="attStats"></div>
+                        <div class="calc" id="calc"></div>
+                        <div class="panel-head mb-2"><div><h3><i class="bi bi-calendar3"></i> Last 5 weeks</h3></div></div>
+                        <div class="heat" id="heat"></div>
+                        <div class="f-help mt-2"><i class="bi bi-square-fill" style="color:#10b981"></i> present &nbsp;<i class="bi bi-square-fill" style="color:#f59e0b"></i> late &nbsp;<i class="bi bi-square-fill" style="color:#f43f5e"></i> absent &nbsp;<i class="bi bi-square-fill" style="color:#0284c7"></i> excused</div>
+                    </div>
+                </div>
+                <div class="col-xl-7">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-list-check"></i> Class by class</h3><p id="recCount"></p></div>
+                            <select class="f-select" id="recFilter" style="width:auto;min-width:140px"><option value="">All statuses</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option></select></div>
+                        <div id="recList"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== TIMETABLE ===== -->
+        <section class="view" id="v-timetable">
+            <div class="page-head"><div><h2>Timetable</h2><p>Your weekly classes and rooms.</p></div></div>
+            <div id="nextCard"></div>
+            <div class="panel glass"><div class="tt-wrap" id="ttArea"></div></div>
+        </section>
+
+        <!-- ===== NOTIFICATIONS ===== -->
+        <section class="view" id="v-alerts">
+            <div class="page-head"><div><h2>Notifications</h2><p>Messages from your teachers and the university.</p></div><button class="btn-glass" id="readAll"><i class="bi bi-check2-all"></i> Mark all read</button></div>
+            <div class="panel glass"><div id="alertList"></div></div>
+        </section>
+
+        <!-- ===== PROFILE ===== -->
+        <section class="view" id="v-profile">
+            <div class="page-head"><div><h2>My Profile</h2><p>Your details, phone and password.</p></div></div>
+            <div class="row g-3 g-xl-4">
+                <div class="col-xl-7">
+                    <div class="panel glass mb-3">
+                        <div class="p-card mb-3" id="pCard"></div>
+                        <div id="pInfo"></div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-sm-8"><label class="f-label" for="pPhone">Phone</label><input class="f-input" id="pPhone"></div>
+                            <div class="col-sm-4 d-flex align-items-end"><button class="btn-primary-grad w-100" id="pSave"><i class="bi bi-check2-circle"></i> Save</button></div>
+                        </div>
+                        <small class="text-muted d-block mt-2">Other details are managed by the admin office.</small>
+                    </div>
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-key"></i> Change Password</h3></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-4"><label class="f-label" for="pwCur">Current</label><input class="f-input" type="password" id="pwCur" autocomplete="current-password"></div>
+                            <div class="col-md-4"><label class="f-label" for="pwNew">New</label><input class="f-input" type="password" id="pwNew" autocomplete="new-password"></div>
+                            <div class="col-md-4"><label class="f-label" for="pwNew2">Confirm</label><input class="f-input" type="password" id="pwNew2" autocomplete="new-password"></div>
+                            <div class="col-12 text-end"><button class="btn-glass" id="pwSave"><i class="bi bi-lock"></i> Update Password</button></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="panel glass">
+                        <div class="panel-head"><div><h3><i class="bi bi-phone"></i> Registered Phone</h3><p>Attendance can only be marked from this device</p></div></div>
+                        <div id="devBox"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ================= PHONE BOTTOM BAR ================= -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Main">
+        <a href="#home" data-v="home"><i class="bi bi-house-door"></i>Home</a>
+        <a href="#attendance" data-v="attendance"><i class="bi bi-clipboard-data"></i>Record</a>
+        <a href="#checkin" data-v="checkin" class="mid" id="bnCheck"><i class="bi bi-geo-alt-fill"></i>Check in</a>
+        <a href="#timetable" data-v="timetable"><i class="bi bi-calendar-week"></i>Classes</a>
+        <a href="#alerts" data-v="alerts"><i class="bi bi-bell"></i>Alerts<span class="bd" id="bnBadge" style="display:none"></span></a>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="assets/data.js"></script>
+    <script>
+        /* ---------- Who is signed in (set before topbar.js builds the profile menu) ---------- */
+        const SESSION = (() => { try { return JSON.parse(sessionStorage.getItem('ga_session')) || {}; } catch { return {}; } })();
+        let students = GA.loadStudents();
+        const ME = students.find(s => s.id === SESSION.studentId) || students.find(s => s.email === SESSION.email);
+        if (!ME) { try { sessionStorage.removeItem('ga_session'); } catch (e) {} location.replace('login.html?role=student'); }
+        window.GA_PROFILE = ME && {
+            name: ME.name, email: ME.email, title: `${ME.roll} · ${ME.dept}`, icon: 'bi-mortarboard', logout: 'login.html?role=student',
+            links: [['#profile', 'bi-person', 'My Profile'], ['#attendance', 'bi-clipboard-data', 'My Attendance'], ['#alerts', 'bi-bell', 'Notifications']]
+        };
+    </script>
+    <script src="assets/admin.js"></script>
+    <script src="assets/fx.js"></script>
+    <script src="assets/topbar.js"></script>
+    <script>
+        /*
+         * STUDENT PORTAL
+         * Uses the shared demo data in assets/data.js. A check-in here is added to the live session
+         * ("ga_sessions"), so the teacher and admin see it immediately; blocked attempts are logged as "flagged".
+         * Later the check-in is sent to the backend, which repeats every check (GPS, geofence, device, QR).
+         */
+        if (!ME) throw new Error('No student signed in');
+        const $ = id => document.getElementById(id);
+        const esc = ui.esc;
+        const S = GA.settings();
+        const MIN_ATT = S.minAttendance || 75, MAX_ACC = +(S.maxAccuracy || 50), QR_INT = +(S.qrInterval || 15) * 1000;
+        const DAY = 864e5, MIN = 6e4;
+        const DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const STATUS = { present: ['Present', 'st-present', '#10b981'], late: ['Late', 'st-late', '#f59e0b'], absent: ['Absent', 'st-absent', '#f43f5e'], excused: ['Excused', 'st-excused', '#0284c7'] };
+        const DEPT_COLORS = {
+            'Computer Science': ['#4338ca', '#6d5ce8'], 'Software Engineering': ['#0d9488', '#14b8a6'], 'Artificial Intelligence': ['#7c3aed', '#a855f7'],
+            'Information Technology': ['#0369a1', '#0ea5e9'], 'Electrical Engineering': ['#c2410c', '#f59e0b'], 'Mathematics': ['#be123c', '#f43f5e']
+        };
+        const PALETTE = ['#4338ca', '#14b8a6', '#0284c7', '#f59e0b', '#8b5cf6', '#f43f5e', '#0d9488'];
+
+        const courses = GA.loadCourses(), COURSE = Object.fromEntries(courses.map(c => [c.code, c]));
+        const MY = courses.filter(c => ME.courses.includes(c.code) && c.status === 'active');
+        const MYCODES = new Set(MY.map(c => c.code));
+        const teachers = GA.loadTeachers(), zones = GA.loadZones();
+        const teacherOf = code => teachers.find(t => t.courses.includes(code));
+        const zoneOf = id => zones.find(z => z.id === id) || zones[0];
+        const colors = code => DEPT_COLORS[COURSE[code]?.dept] || ['#4338ca', '#6d5ce8'];
+        const initials = n => n.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const key = GA.dateKey, parse = s => new Date(s + 'T00:00:00');
+        const clock = t => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        const endTime = c => { const [h, m] = c.time.split(':').map(Number), t = h * 60 + m + c.dur; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+        const pctCol = p => p >= 85 ? '#10b981' : p >= MIN_ATT ? '#f59e0b' : '#f43f5e';
+        const barCol = p => p >= 85 ? 'linear-gradient(90deg,#14b8a6,#10b981)' : p >= MIN_ATT ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'linear-gradient(90deg,#fb7185,#f43f5e)';
+        const readLS = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+        const writeLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+        const firstName = () => ME.name.split(' ')[0];
+
+        $('topName').textContent = ME.name; $('topRoll').textContent = ME.roll; $('topAvatar').textContent = initials(ME.name);
+        $('bellBtn').addEventListener('click', () => go('alerts'));
+        $('reqTxt').textContent = MIN_ATT + '%';
+
+        /* ================= MY RECORDS ================= */
+        let RECORDS = [];
+        function rebuild() {
+            const edits = GA.loadEdits();
+            const map = new Map();
+            [...GA.historyRecords(35), ...GA.loadSessionRecords(), ...readLS('ga_att_manual', [])]
+                .filter(r => r.sid === ME.id && MYCODES.has(r.code)).forEach(r => map.set(r.id, { ...r }));
+            map.forEach(r => { const h = edits[r.id]; if (h && h.length) { r.status = h[h.length - 1].status; r.edited = h[h.length - 1]; } });
+            RECORDS = [...map.values()].sort((a, b) => b.date.localeCompare(a.date) || COURSE[b.code].time.localeCompare(COURSE[a.code].time));
+        }
+        rebuild();
+        function statsOf(rs) {
+            const n = { present: 0, late: 0, absent: 0, excused: 0 }; rs.forEach(r => n[r.status]++);
+            const counted = n.present + n.late + n.absent;
+            return { ...n, total: rs.length, counted, pct: counted ? (n.present + n.late) / counted * 100 : null };
+        }
+        // classes you must attend in a row to reach the requirement / classes you can still miss
+        function advice(st) {
+            if (st.pct === null) return null;
+            const r = MIN_ATT / 100, att = st.present + st.late;
+            if (st.pct < MIN_ATT) return { need: Math.ceil((r * st.counted - att) / (1 - r)) };
+            return { canMiss: Math.max(0, Math.floor(att / r - st.counted)) };
+        }
+
+        /* ================= LIVE SESSIONS ================= */
+        let sessions = GA.loadSessions();
+        const endsAt = s => s.startedAt + s.duration * MIN;
+        const myLive = () => sessions.filter(s => MYCODES.has(s.code) && endsAt(s) > Date.now());
+        const myCheck = s => s.checkins.find(x => x.sid === ME.id);
+
+        /* ================= ROUTER ================= */
+        const VIEWS = ['home', 'checkin', 'attendance', 'timetable', 'alerts', 'profile'];
+        let current = null;
+        function go(v) { if (location.hash !== '#' + v) location.hash = v; else show(v); }
+        function show(v) {
+            if (!VIEWS.includes(v)) v = 'home';
+            if (current === 'checkin' && v !== 'checkin') stopCamera();
+            current = v;
+            document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'v-' + v));
+            document.querySelectorAll('#sidebar a[data-v], #bottomNav a').forEach(a => a.classList.toggle('active', a.dataset.v === v));
+            document.body.classList.remove('nav-open');
+            window.scrollTo({ top: 0, behavior: 'instant' });
+            ({ home: renderHome, checkin: renderCheckin, attendance: renderAttendance, timetable: renderTimetable, alerts: renderAlerts, profile: renderProfile })[v]();
+        }
+        window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+        document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); if (g.dataset.sess) pickSession = g.dataset.sess; go(g.dataset.goto); } });
+
+        /* ================= HOME ================= */
+        function liveCtaHtml() {
+            return myLive().map(s => {
+                const c = COURSE[s.code], ci = myCheck(s);
+                return ci
+                    ? `<div class="live-cta done"><div class="ic"><i class="bi bi-check2-circle"></i></div><div style="min-width:0"><b>You're checked in to ${s.code}</b><small>${STATUS[ci.status][0]} · ${clock(ci.at)}${ci.manual ? ' · marked by teacher' : ` · ${ci.dist} m from centre`}</small></div></div>`
+                    : `<div class="live-cta"><div class="ic"><i class="bi bi-broadcast"></i></div><div style="min-width:0"><b>${s.code} attendance is open now</b><small>${esc(c.name)} · ${esc(c.room)} · closes in <span data-left="${s.id}">${mmss(endsAt(s) - Date.now())}</span></small></div>
+                        <button class="go" data-goto="checkin" data-sess="${s.id}"><i class="bi bi-geo-alt-fill"></i> Check in</button></div>`;
+            }).join('');
+        }
+        function nextClassInfo() {
+            const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+            for (let i = 0; i < 8; i++) {
+                const d = new Date(today.getTime() + i * DAY), wd = d.getDay();
+                const list = MY.filter(c => c.days.includes(wd)).filter(c => { if (i) return true; const [h, m] = c.time.split(':').map(Number); return h * 60 + m > nowMin; }).sort((a, b) => a.time.localeCompare(b.time));
+                if (list.length) { const c = list[0], [h, m] = c.time.split(':').map(Number), at = new Date(d); at.setHours(h, m, 0, 0); return { c, at, day: i === 0 ? 'today' : i === 1 ? 'tomorrow' : DAYN[wd] }; }
+            }
+            return null;
+        }
+        function renderHome() {
+            $('liveCtas').innerHTML = liveCtaHtml();
+            const hr = new Date().getHours();
+            $('greet').textContent = `${hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName()} 👋`;
+            $('greetSub').textContent = `${ME.roll} · ${ME.dept} · Semester ${ME.sem}`;
+            const st = statsOf(RECORDS), p = st.pct;
+            $('overallPct').textContent = p === null ? '—' : p.toFixed(0) + '%';
+            $('bigRing').style.setProperty('--p', (p || 0) + '%');
+            const low = MY.filter(c => { const x = statsOf(RECORDS.filter(r => r.code === c.code)); return x.pct !== null && x.pct < MIN_ATT; });
+            $('standing').innerHTML = p === null ? '<i class="bi bi-hourglass"></i> No classes recorded yet'
+                : low.length ? `<i class="bi bi-exclamation-triangle-fill"></i> Below ${MIN_ATT}% in ${low.map(c => c.code).join(', ')} — attend every class`
+                : p >= 85 ? '<i class="bi bi-patch-check-fill"></i> Great — you\'re in good standing' : `<i class="bi bi-info-circle-fill"></i> Above ${MIN_ATT}% — keep it up`;
+
+            $('courseMini').innerHTML = MY.map(c => {
+                const x = statsOf(RECORDS.filter(r => r.code === c.code)), a = advice(x), t = teacherOf(c.code);
+                return `<div class="col-md-6 col-xl-4"><div class="course-mini">
+                    <div class="row-between"><b>${c.code} · ${esc(c.name)}</b><b style="color:${x.pct === null ? 'inherit' : pctCol(x.pct)}">${x.pct === null ? '—' : x.pct.toFixed(0) + '%'}</b></div>
+                    <small>${t ? esc(t.name) : 'Teacher TBA'} · ${esc(c.room)}</small>
+                    <div class="pct-bar"><span style="width:${x.pct || 0}%;background:${barCol(x.pct || 0)}"></span></div>
+                    <div class="need" style="color:${a && a.need ? '#be123c' : '#047857'}">${!a ? '' : a.need ? `<i class="bi bi-arrow-up-circle"></i> Attend the next ${a.need} class${a.need > 1 ? 'es' : ''} to reach ${MIN_ATT}%` : `<i class="bi bi-shield-check"></i> You can miss ${a.canMiss} more and stay above ${MIN_ATT}%`}</div>
+                </div></div>`;
+            }).join('') || '<div class="empty">You are not enrolled in any active course.</div>';
+
+            const wd = new Date().getDay(), nowMin = new Date().getHours() * 60 + new Date().getMinutes(), tk = key(today);
+            const todays = MY.filter(c => c.days.includes(wd)).sort((a, b) => a.time.localeCompare(b.time)), nx = nextClassInfo();
+            $('todayTitle').textContent = 'Today · ' + DAYN[wd];
+            $('todaySub').textContent = todays.length ? `${todays.length} class${todays.length > 1 ? 'es' : ''}` : 'No classes today';
+            $('todayList').innerHTML = todays.length ? todays.map(c => {
+                const [c1] = colors(c.code), [h, m] = c.time.split(':').map(Number), live = myLive().find(s => s.code === c.code), rec = RECORDS.find(r => r.date === tk && r.code === c.code);
+                const ci = live && myCheck(live);
+                const right = rec ? `<span class="tag ${STATUS[rec.status][1]}">${STATUS[rec.status][0]}</span>`
+                    : live ? (ci ? `<span class="tag st-present">Checked in</span>` : `<button class="btn-primary-grad" data-goto="checkin" data-sess="${live.id}" style="padding:7px 12px;font-size:12.5px;box-shadow:none">Check in</button>`)
+                    : h * 60 + m + c.dur < nowMin ? '<span class="tag" style="background:rgba(27,34,64,.06);color:var(--muted)">Ended</span>' : '<span class="tag" style="background:rgba(67,56,202,.1);color:var(--primary)">Upcoming</span>';
+                return `<div class="tl-item"><div class="tl-time">${c.time}<small>${endTime(c)}</small></div><div class="tl-card" style="--c1:${c1}"><div style="min-width:0"><b>${c.code} · ${esc(c.name)}</b><small>${esc(c.room)}</small></div><div class="r">${right}</div></div></div>`;
+            }).join('') : `<div class="empty py-4"><i class="bi bi-cup-hot"></i><b>No classes today</b>${nx ? `Next: ${nx.c.code} ${nx.day} at ${nx.c.time} in ${esc(nx.c.room)}.` : ''}</div>`;
+
+            $('recentList').innerHTML = RECORDS.slice(0, 6).map(recHtml).join('') || '<div class="empty py-3">No classes recorded yet.</div>';
+        }
+        function recHtml(r) {
+            const d = parse(r.date), c = COURSE[r.code];
+            return `<div class="rec"><div class="dt"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-GB', { month: 'short' })} · ${DAYN[d.getDay()]}</small></div>
+                <div style="min-width:0"><b class="c">${r.code} · ${esc(c.name)}</b><small class="m">${r.at ? `Checked in ${clock(r.at)}` : 'No check-in'}${r.dist != null ? ` · ${r.dist} m from centre` : ''}${r.method === 'manual' ? ' · marked by teacher' : r.method === 'qr' ? ' · GPS + QR' : ''}</small>
+                ${r.edited ? `<small class="m d-block"><i class="bi bi-pencil"></i> Corrected by ${esc(r.edited.by)}: “${esc(r.edited.reason)}”</small>` : ''}</div>
+                <div class="r"><span class="tag ${STATUS[r.status][1]}">${STATUS[r.status][0]}</span></div></div>`;
+        }
+
+        /* ================= MARK ATTENDANCE ================= */
+        let pickSession = null, flow = null, camStream = null, camLoop = null;
+        function deviceId() { let id = readLS('ga_device_id', null); if (!id) { id = 'dev-' + Math.random().toString(36).slice(2, 10); writeLS('ga_device_id', id); } return id; }
+        function deviceLabel() {
+            const ua = navigator.userAgent;
+            const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iPhone' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'Mac' : 'Device';
+            const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : 'Browser';
+            return `${os} · ${br}`;
+        }
+        function renderCheckin() {
+            sessions = GA.loadSessions();
+            if (flow) return renderFlow();
+            const live = myLive();
+            if (pickSession && live.some(s => s.id === pickSession) && !myCheck(live.find(s => s.id === pickSession))) { startFlow(pickSession); pickSession = null; return; }
+            pickSession = null;
+            const nx = nextClassInfo();
+            $('checkArea').innerHTML = live.length ? `<div style="max-width:720px">${live.map(s => {
+                const c = COURSE[s.code], [c1, c2] = colors(s.code), ci = myCheck(s), t = teacherOf(s.code);
+                return `<div class="sess-card"><div class="cc" style="--c1:${c1};--c2:${c2}">${s.code}</div>
+                    <div style="min-width:0"><b>${esc(c.name)}</b><small>${t ? esc(t.name) + ' · ' : ''}${esc(c.room)} · ${esc(zoneOf(s.zone).name)}${s.qr ? ' · <i class="bi bi-qr-code"></i> QR needed' : ''}</small><br>
+                    <span class="tag live-tag mt-1">Open · closes in <span data-left="${s.id}">${mmss(endsAt(s) - Date.now())}</span></span></div>
+                    <div class="r">${ci ? `<span class="tag ${STATUS[ci.status][1]}"><i class="bi bi-check2"></i> ${STATUS[ci.status][0]} · ${clock(ci.at)}</span>` : `<button class="btn-primary-grad" data-start="${s.id}"><i class="bi bi-geo-alt-fill"></i> Check in</button>`}</div></div>`;
+            }).join('')}</div>`
+                : `<div class="panel glass" style="max-width:720px"><div class="empty"><i class="bi bi-broadcast"></i><b>No class is open for check-in right now</b>Your teacher starts attendance at the beginning of class.${nx ? `<br>Next class: <b>${nx.c.code}</b> ${nx.day} at ${nx.c.time} in ${esc(nx.c.room)}.` : ''}</div></div>`;
+        }
+        $('checkArea').addEventListener('click', e => {
+            const st = e.target.closest('[data-start]'); if (st) return startFlow(st.dataset.start);
+            const lp = e.target.closest('[data-loc]'); if (lp) return locate(lp.dataset.loc);
+            if (e.target.closest('#cancelFlow')) { stopCamera(); flow = null; return renderCheckin(); }
+            if (e.target.closest('#retry')) { stopCamera(); flow = { sid: flow.sid, steps: {} }; return renderFlow(); }
+            if (e.target.closest('#doneBtn')) { stopCamera(); flow = null; return go('home'); }
+            if (e.target.closest('#scanBtn')) return startCamera();
+            if (e.target.closest('#codeBtn')) return checkCode($('codeIn').value);
+        });
+        $('checkArea').addEventListener('keydown', e => { if (e.target.id === 'codeIn' && e.key === 'Enter') checkCode(e.target.value); });
+
+        function startFlow(sid) { flow = { sid, steps: {} }; renderFlow(); }
+        const STEP_DEF = s => [['open', 'Session is open', 'bi-broadcast'], ['gps', 'Getting your location', 'bi-crosshair'], ['fence', `Inside ${zoneOf(s.zone).name}`, 'bi-bullseye'], ['device', 'Registered phone', 'bi-phone']].concat(s.qr ? [['qr', 'Classroom QR code', 'bi-qr-code']] : []);
+        function renderFlow() {
+            const s = sessions.find(x => x.id === flow.sid);
+            if (!s) { flow = null; ui.toast('That session has closed.', 'info'); return renderCheckin(); }
+            const c = COURSE[s.code], [c1, c2] = colors(s.code);
+            if (flow.result) return renderResult(s);
+            const stepsHtml = STEP_DEF(s).map(([k, label, icon]) => {
+                const st = flow.steps[k] || {};
+                const ic = st.state === 'ok' ? 'bi-check-lg' : st.state === 'fail' ? 'bi-x-lg' : st.state === 'run' ? 'bi-arrow-repeat' : icon;
+                return `<div class="stp ${st.state || ''}"><div class="si"><i class="bi ${ic}"></i></div><div style="min-width:0"><b>${label}</b><small>${esc(st.msg || (k === 'open' ? `Closes at ${clock(endsAt(s))}` : 'Waiting…'))}</small></div></div>`;
+            }).join('');
+            const started = Object.keys(flow.steps).length > 0;
+            $('checkArea').innerHTML = `<div class="flow">
+                <div class="flow-head" style="--c1:${c1};--c2:${c2}"><div style="flex:1;min-width:0"><small style="opacity:.9">${s.code} · ${esc(c.room)}</small><b style="display:block;font-size:17px">${esc(c.name)}</b></div><div class="text-end"><small style="opacity:.9">closes in</small><div class="t" data-left="${s.id}">${mmss(endsAt(s) - Date.now())}</div></div></div>
+                ${started ? '' : `<div class="panel glass mb-3"><div class="panel-head"><div><h3><i class="bi bi-geo-alt"></i> Share your location</h3><p>We only read it now, to check you are inside the classroom geofence.</p></div></div>
+                    <div class="loc-pick">
+                        <button class="loc-btn" data-loc="real"><i class="bi bi-crosshair" style="color:#4338ca;background:rgba(67,56,202,.1)"></i><div><b>Use my phone's GPS</b><small>Your browser will ask for permission. Works best on a phone, outdoors or near a window.</small></div></button>
+                        <div class="demo-lbl">Demo — no phone or backend yet</div>
+                        <button class="loc-btn" data-loc="in"><i class="bi bi-door-open" style="color:#047857;background:rgba(16,185,129,.12)"></i><div><b>Simulate: I'm in the classroom</b><small>A location inside ${esc(zoneOf(s.zone).name)} (${zoneOf(s.zone).radius} m radius)</small></div></button>
+                        <button class="loc-btn" data-loc="out"><i class="bi bi-house" style="color:#be123c;background:rgba(244,63,94,.1)"></i><div><b>Simulate: I'm outside</b><small>See what happens when someone tries from far away</small></div></button>
+                    </div></div>`}
+                <div class="steps">${stepsHtml}</div>
+                <div id="qrArea"></div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn-glass flex-fill" id="cancelFlow"><i class="bi bi-arrow-left"></i> Back</button>
+                    ${Object.values(flow.steps).some(x => x.state === 'fail') ? '<button class="btn-primary-grad flex-fill" id="retry"><i class="bi bi-arrow-repeat"></i> Try again</button>' : ''}
+                </div></div>`;
+            if (flow.awaitQr) renderQrStep();
+        }
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        function setStep(k, state, msg) { flow.steps[k] = { state, msg }; renderFlow(); }
+        function distance(a, b) {
+            const R = 6371000, rad = x => x * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+            const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+            return 2 * R * Math.asin(Math.sqrt(h));
+        }
+        function offset(z, meters) { const a = Math.random() * 2 * Math.PI; return { lat: z.lat + meters * Math.cos(a) / 111320, lng: z.lng + meters * Math.sin(a) / (111320 * Math.cos(z.lat * Math.PI / 180)) }; }
+        function getRealPosition() {
+            return new Promise((res, rej) => {
+                if (!navigator.geolocation) return rej('Location is not supported on this device.');
+                navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
+                    e => rej(e.code === 1 ? 'Location permission was denied. Allow location access and try again.' : 'Could not get your location. Move near a window and try again.'),
+                    { enableHighAccuracy: S.highAccuracy !== false, timeout: 15000, maximumAge: 0 });
+            });
+        }
+        function flag(s, reason, dist) {
+            sessions = GA.loadSessions();
+            const live = sessions.find(x => x.id === s.id); if (!live) return;
+            live.flags.push({ sid: ME.id, at: Date.now(), reason, dist: Math.round(dist || 0) });
+            GA.saveSessions(sessions);
+        }
+        async function locate(mode) {
+            const s = sessions.find(x => x.id === flow.sid); if (!s) return;
+            const z = zoneOf(s.zone);
+            setStep('open', 'run', 'Checking…'); await wait(400);
+            sessions = GA.loadSessions();
+            const live = sessions.find(x => x.id === s.id);
+            if (!live || endsAt(live) <= Date.now()) return setStep('open', 'fail', 'This session has already closed.');
+            if (myCheck(live)) { flow.result = { status: myCheck(live).status, at: myCheck(live).at, dist: myCheck(live).dist, already: true }; return renderFlow(); }
+            setStep('open', 'ok', `Open until ${clock(endsAt(live))}`);
+
+            setStep('gps', 'run', mode === 'real' ? 'Waiting for GPS…' : 'Reading location…');
+            let pos;
+            try {
+                if (mode === 'real') pos = await getRealPosition();
+                else { await wait(900); pos = mode === 'in' ? { ...offset(z, Math.random() * z.radius * .6), acc: Math.round(6 + Math.random() * 14) } : { ...offset(z, z.radius * (2 + Math.random() * 3)), acc: Math.round(8 + Math.random() * 12) }; }
+            } catch (err) { return setStep('gps', 'fail', err); }
+            flow.pos = pos;
+            if (pos.acc > MAX_ACC) { flag(s, 'GPS accuracy too low', distance(pos, z)); return setStep('gps', 'fail', `Accuracy ±${Math.round(pos.acc)} m — must be within ±${MAX_ACC} m. Move closer to a window and try again.`); }
+            setStep('gps', 'ok', `Location found · accuracy ±${Math.round(pos.acc)} m`);
+
+            setStep('fence', 'run', 'Comparing with the classroom…'); await wait(600);
+            const d = distance(pos, z); flow.dist = Math.round(d);
+            if (d > z.radius) { flag(s, 'Outside the geofence', d); return setStep('fence', 'fail', `You are ${Math.round(d)} m from the centre — the allowed radius is ${z.radius} m.`); }
+            setStep('fence', 'ok', `${Math.round(d)} m from the centre (allowed ${z.radius} m)`);
+
+            setStep('device', 'run', 'Checking this phone…'); await wait(500);
+            students = GA.loadStudents(); const me = students.find(x => x.id === ME.id);
+            if (S.deviceBind !== false) {
+                if (me.device && me.device.deviceId && me.device.deviceId !== deviceId()) { flag(s, 'Unregistered device', d); return setStep('device', 'fail', `This isn't your registered phone (${me.device.model}). Ask the admin to reset it if you changed phones.`); }
+                if (!me.device || !me.device.deviceId) {
+                    me.device = { model: me.device?.model || deviceLabel(), bound: me.device?.bound || key(new Date()), deviceId: deviceId() }; GA.saveStudents(students); Object.assign(ME, me);
+                    setStep('device', 'ok', `This phone is now registered to your account (${me.device.model})`);
+                } else setStep('device', 'ok', `${me.device.model} · registered`);
+            } else setStep('device', 'ok', 'Device check is turned off');
+
+            if (s.qr) { flow.awaitQr = true; flow.steps.qr = { state: 'run', msg: 'Scan the QR on the projector or type its 6-character code' }; return renderFlow(); }
+            submit();
+        }
+        function renderQrStep() {
+            if (!$('qrArea')) return;
+            $('qrArea').innerHTML = `<div class="qr-step">
+                <div class="scan-box ${camStream ? 'on' : ''}" id="scanBox"><video id="cam" playsinline muted></video><div class="line"></div></div>
+                <div class="d-flex gap-2 mb-2"><button class="btn-glass flex-fill" id="scanBtn"><i class="bi bi-camera"></i> ${camStream ? 'Scanning…' : 'Scan QR with camera'}</button></div>
+                <div class="code-in"><input class="f-input" id="codeIn" maxlength="7" placeholder="ABC 123" autocomplete="off" aria-label="QR code"><button class="btn-primary-grad" id="codeBtn">Verify</button></div>
+                <div class="f-help">The code changes every ${QR_INT / 1000} seconds — use the one on screen right now.</div></div>`;
+            if (camStream) { const v = $('cam'); v.srcObject = camStream; v.play().catch(() => {}); }
+        }
+        function validTokens(s) {
+            const slot = Math.floor(Date.now() / QR_INT);
+            return [slot, slot - 1].map(n => (GA.hash(s.id + n).toString(36).toUpperCase() + 'XXXXXX').slice(0, 6));   // same formula as the teacher / admin QR
+        }
+        function checkCode(raw) {
+            const s = sessions.find(x => x.id === flow.sid); if (!s) return;
+            let code = String(raw || '').toUpperCase().replace(/\s/g, '');
+            const m = code.match(/^GEOATTEND:([^:]+):([A-Z0-9]{6})$/i);
+            if (m) { if (m[1] !== s.id) { flow.steps.qr = { state: 'fail', msg: 'That QR belongs to a different class.' }; return renderFlow(); } code = m[2].toUpperCase(); }
+            if (code.length !== 6) { const i = $('codeIn'); if (i) { i.classList.add('invalid'); fx.shake(i); } return ui.toast('Enter the 6-character code shown in class.', 'error'); }
+            if (!validTokens(s).includes(code)) { flow.steps.qr = { state: 'fail', msg: 'Wrong or expired code — scan the current QR again.' }; flag(s, 'Wrong QR code', flow.dist); stopCamera(); return renderFlow(); }
+            stopCamera(); flow.awaitQr = false; flow.steps.qr = { state: 'ok', msg: 'QR code verified' };
+            submit();
+        }
+        async function startCamera() {
+            if (camStream) return;
+            if (!navigator.mediaDevices?.getUserMedia) return ui.toast('Camera is not available — type the code instead.', 'info');
+            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
+            catch { return ui.toast('Camera permission denied — type the code instead.', 'info'); }
+            renderFlow();
+            const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const tick = () => {
+                const v = $('cam');
+                if (!camStream || !v) return;
+                if (v.readyState === v.HAVE_ENOUGH_DATA && window.jsQR) {
+                    canvas.width = v.videoWidth; canvas.height = v.videoHeight; ctx.drawImage(v, 0, 0);
+                    const res = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+                    if (res && res.data) return checkCode(res.data);
+                }
+                camLoop = requestAnimationFrame(tick);
+            };
+            camLoop = requestAnimationFrame(tick);
+        }
+        function stopCamera() { if (camLoop) cancelAnimationFrame(camLoop); camLoop = null; if (camStream) camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+
+        function submit() {
+            sessions = GA.loadSessions();
+            const s = sessions.find(x => x.id === flow.sid);
+            if (!s || endsAt(s) <= Date.now()) { flow.result = { fail: 'The session closed before your check-in was saved.' }; return renderFlow(); }
+            let ci = myCheck(s);
+            if (!ci) {
+                const at = Date.now();
+                ci = { sid: ME.id, at, status: at - s.startedAt > s.lateAfter * MIN ? 'late' : 'present', dist: flow.dist, acc: Math.round(flow.pos.acc) };
+                s.checkins.push(ci); GA.saveSessions(sessions);
+            }
+            flow.result = { status: ci.status, at: ci.at, dist: ci.dist };
+            renderFlow(); refreshLive();
+            if (ci.status === 'present') confetti();
+        }
+        function renderResult(s) {
+            const r = flow.result, c = COURSE[s?.code] || {};
+            if (r.fail) { $('checkArea').innerHTML = `<div class="flow"><div class="panel glass result fail"><div class="ic"><i class="bi bi-x-lg"></i></div><h3>Couldn't check in</h3><p>${esc(r.fail)}</p><button class="btn-glass mt-3" id="doneBtn">Back home</button></div></div>`; return; }
+            const late = r.status === 'late';
+            $('checkArea').innerHTML = `<div class="flow"><div class="panel glass result ${late ? 'late' : 'ok'}">
+                <div class="ic"><i class="bi ${late ? 'bi-alarm' : 'bi-check-lg'}"></i></div>
+                <h3>${r.already ? 'Already checked in' : late ? 'Checked in — marked late' : 'You\'re checked in!'}</h3>
+                <p><b>${s.code} · ${esc(c.name)}</b></p>
+                <p>${clock(r.at)} · ${r.dist != null ? r.dist + ' m from the centre of ' + esc(zoneOf(s.zone).name) : 'marked by your teacher'}</p>
+                ${late ? `<p class="text-muted" style="font-size:13px">Check-ins after ${s.lateAfter} minutes count as late.</p>` : ''}
+                <button class="btn-primary-grad mt-3" id="doneBtn"><i class="bi bi-house"></i> Done</button></div></div>`;
+        }
+        function confetti() {
+            const box = document.createElement('div'); box.className = 'confetti';
+            const cols = ['#4338ca', '#10b981', '#f59e0b', '#f43f5e', '#0ea5e9', '#a855f7'];
+            box.innerHTML = Array.from({ length: 60 }, () => `<i style="left:${Math.random() * 100}%;background:${cols[Math.floor(Math.random() * cols.length)]};animation-duration:${1.6 + Math.random() * 1.6}s;animation-delay:${Math.random() * .4}s"></i>`).join('');
+            document.body.appendChild(box); setTimeout(() => box.remove(), 3600);
+        }
+
+        // keep countdowns / live state fresh (the teacher can start or end sessions at any time)
+        function refreshLive() {
+            const live = myLive(), open = live.some(s => !myCheck(s));
+            $('navCheck').classList.toggle('has-live', open);
+            $('bnCheck').classList.toggle('live', open);
+            if (current === 'home') $('liveCtas').innerHTML = liveCtaHtml();
+            if (current === 'checkin' && !flow) renderCheckin();
+        }
+        let lastSig = '';
+        setInterval(() => {
+            sessions = GA.loadSessions();
+            const sig = myLive().map(s => s.id + ':' + (myCheck(s)?.status || '')).join(',');
+            if (sig !== lastSig) { lastSig = sig; rebuild(); refreshLive(); if (current === 'home') renderHome(); }
+            document.querySelectorAll('[data-left]').forEach(el => { const s = sessions.find(x => x.id === el.dataset.left); if (s) el.textContent = mmss(endsAt(s) - Date.now()); });
+            if (current === 'timetable') updateNext();
+        }, 1000);
+
+        /* ================= MY ATTENDANCE ================= */
+        let attCourse = '';
+        $('courseChips').innerHTML = `<label><input type="radio" name="ac" value="" checked><span>All courses</span></label>` + MY.map(c => `<label><input type="radio" name="ac" value="${c.code}"><span>${c.code}</span></label>`).join('');
+        $('courseChips').addEventListener('change', e => { attCourse = e.target.value; renderAttendance(); });
+        $('recFilter').addEventListener('change', () => renderAttendance(true));
+        function renderAttendance(listOnly) {
+            const rs = RECORDS.filter(r => !attCourse || r.code === attCourse), st = statsOf(rs), a = advice(st);
+            if (!listOnly) {
+                $('attStats').innerHTML = `<div><b style="color:${st.pct === null ? 'inherit' : pctCol(st.pct)}">${st.pct === null ? '—' : st.pct.toFixed(1) + '%'}</b><span>Attendance</span></div><div><b>${st.present}</b><span>Present</span></div><div><b>${st.late}</b><span>Late</span></div><div><b>${st.absent}</b><span>Absent</span></div>`;
+                $('calc').style.cssText = a && a.need ? 'background:rgba(244,63,94,.08);color:#9f1239' : 'background:rgba(16,185,129,.08);color:#065f46';
+                $('calc').innerHTML = !a ? '<i class="bi bi-info-circle"></i><div><b>No classes yet</b></div>' : a.need
+                    ? `<i class="bi bi-exclamation-triangle-fill"></i><div><b>You need ${a.need} more class${a.need > 1 ? 'es' : ''} in a row</b><small>to get back to ${MIN_ATT}%${attCourse ? ' in ' + attCourse : ''}. Don't miss any more classes.</small></div>`
+                    : `<i class="bi bi-shield-check"></i><div><b>${a.canMiss ? `You can miss ${a.canMiss} more class${a.canMiss > 1 ? 'es' : ''}` : 'You\'re right at the limit'}</b><small>and still stay above ${MIN_ATT}%${attCourse ? ' in ' + attCourse : ''}.</small></div>`;
+                // heat map: 5 weeks, Monday first
+                const start = new Date(today.getTime() - ((today.getDay() + 6) % 7 + 28) * DAY);
+                let h = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div class="wd">${d[0]}</div>`).join('');
+                for (let i = 0; i < 35; i++) {
+                    const d = new Date(start.getTime() + i * DAY), dk = key(d), day = rs.filter(r => r.date === dk);
+                    const worst = ['absent', 'late', 'excused', 'present'].find(s => day.some(r => r.status === s));
+                    h += `<div class="d ${worst ? 'has' : ''} ${dk === key(today) ? 'today' : ''}" style="${worst ? 'background:' + STATUS[worst][2] : ''}" title="${d.toDateString()}${day.length ? ' · ' + day.map(r => r.code + ' ' + STATUS[r.status][0]).join(', ') : ''}">${d > today ? '' : d.getDate()}</div>`;
+                }
+                $('heat').innerHTML = h;
+            }
+            const f = $('recFilter').value, list = rs.filter(r => !f || r.status === f);
+            $('recCount').textContent = `${list.length} class${list.length === 1 ? '' : 'es'}`;
+            $('recList').innerHTML = list.map(recHtml).join('') || '<div class="empty py-3">No classes match.</div>';
+        }
+
+        /* ================= TIMETABLE ================= */
+        function renderTimetable() {
+            const times = [...new Set(MY.map(c => c.time))].sort(), wd = new Date().getDay();
+            let html = '<div class="tt"><div></div>' + [1, 2, 3, 4, 5].map(d => `<div class="h ${d === wd ? 'today' : ''}">${DAYN[d]}${d === wd ? ' · Today' : ''}</div>`).join('');
+            times.forEach(t => {
+                html += `<div class="t">${t}</div>`;
+                for (let d = 1; d <= 5; d++) {
+                    const c = MY.find(x => x.time === t && x.days.includes(d)), [c1, c2] = c ? colors(c.code) : [], tch = c && teacherOf(c.code);
+                    html += `<div class="cell">${c ? `<div class="blk" style="--c1:${c1};--c2:${c2}"><b>${c.code}</b>${esc(c.room)} · ${c.time}–${endTime(c)}<br>${tch ? esc(tch.name) : ''}</div>` : ''}</div>`;
+                }
+            });
+            $('ttArea').innerHTML = times.length ? html + '</div>' : '<div class="empty"><i class="bi bi-calendar-x"></i><b>No classes scheduled</b></div>';
+            updateNext(true);
+        }
+        function updateNext(force) {
+            const nx = nextClassInfo();
+            if (!nx) { if (force) $('nextCard').innerHTML = ''; return; }
+            const [c1, c2] = colors(nx.c.code), ms = nx.at - Date.now(), h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000);
+            const txt = ms > DAY ? `${Math.floor(ms / DAY)}d ${h % 24}h` : `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+            if (force || !$('ncLeft')) $('nextCard').innerHTML = `<div class="next-card" style="--c1:${c1};--c2:${c2}"><i class="bi bi-alarm" style="font-size:28px"></i><div style="flex:1;min-width:0"><small style="opacity:.9">Next class · ${nx.day} at ${nx.c.time}</small><b style="display:block;font-size:16px">${nx.c.code} · ${esc(nx.c.name)} — ${esc(nx.c.room)}</b></div><div class="text-end"><small style="opacity:.9">starts in</small><div class="big" id="ncLeft">${txt}</div></div></div>`;
+            else $('ncLeft').textContent = txt;
+        }
+
+        /* ================= NOTIFICATIONS ================= */
+        const readKey = 'ga_student_read_' + ME.id;
+        function alerts() {
+            const out = [];
+            const myPct = code => statsOf(RECORDS.filter(r => r.code === code)).pct;
+            // teacher announcements
+            Object.keys(localStorage).filter(k => k.startsWith('ga_teacher_ann_')).forEach(k => {
+                const t = teachers.find(x => x.id === k.slice('ga_teacher_ann_'.length));
+                readLS(k, []).forEach(a => {
+                    const to = a.to || '';
+                    const mine = to === 'all' ? t && t.courses.some(c => MYCODES.has(c))
+                        : to.startsWith('course:') ? MYCODES.has(to.slice(7))
+                        : to.startsWith('risk:') ? MYCODES.has(to.slice(5)) && (myPct(to.slice(5)) ?? 100) < MIN_ATT
+                        : to === 'student:' + ME.id;
+                    if (mine) out.push({ id: 'ta' + a.id, type: a.type, title: a.title, msg: a.msg, at: a.at, from: t ? t.name : 'Teacher' });
+                });
+            });
+            // admin / university announcements
+            const n = readLS('ga_notifications', null);
+            (n?.sent || []).forEach(a => {
+                const mine = ['all', 'students'].includes(a.audience) || (a.audience === 'course' && MYCODES.has(a.course)) || (a.audience === 'low' && MY.some(c => (myPct(c.code) ?? 100) < MIN_ATT));
+                if (mine) out.push({ id: 'ad' + a.id, type: a.type, title: a.title, msg: a.msg, at: a.at, from: 'University admin' });
+            });
+            // system: low attendance + open sessions
+            MY.forEach(c => { const p = myPct(c.code); if (p !== null && p < MIN_ATT) out.push({ id: 'low-' + c.code + '-' + key(today), type: 'urgent', title: `Low attendance in ${c.code}`, msg: `Your attendance in ${c.name} is ${p.toFixed(0)}% — below the ${MIN_ATT}% requirement.`, at: today.getTime() + 8 * 3600000, from: 'GeoAttend' }); });
+            myLive().forEach(s => { if (!myCheck(s)) out.push({ id: 'live-' + s.id, type: 'reminder', title: `${s.code} attendance is open`, msg: `Check in before ${clock(endsAt(s))}.`, at: s.startedAt, from: 'GeoAttend', live: s.id }); });
+            return out.sort((a, b) => b.at - a.at);
+        }
+        function renderBadges() {
+            const read = new Set(readLS(readKey, [])), n = alerts().filter(a => !read.has(a.id)).length;
+            [$('navBadge'), $('bnBadge')].forEach(b => { b.textContent = n; b.style.display = n ? '' : 'none'; });
+            $('bellDot').style.display = n ? '' : 'none';
+        }
+        function renderAlerts() {
+            const read = new Set(readLS(readKey, [])), list = alerts();
+            const IC = { announcement: ['bi-megaphone', '#4338ca'], reminder: ['bi-alarm', '#f59e0b'], urgent: ['bi-exclamation-triangle', '#f43f5e'] };
+            $('alertList').innerHTML = list.length ? list.map(a => { const [ic, col] = IC[a.type] || IC.announcement; return `
+                <div class="al ${read.has(a.id) ? '' : 'unread'}" data-al="${a.id}" ${a.live ? `data-live="${a.live}"` : ''}><div class="ic" style="color:${col};background:${col}1a"><i class="bi ${ic}"></i></div>
+                <div style="min-width:0"><b>${esc(a.title)}</b><p>${esc(a.msg)}</p><small>${esc(a.from)} · ${new Date(a.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div></div>`; }).join('')
+                : '<div class="empty"><i class="bi bi-bell-slash"></i><b>No notifications</b>Messages from your teachers will appear here.</div>';
+            renderBadges();
+        }
+        $('alertList').addEventListener('click', e => {
+            const el = e.target.closest('[data-al]'); if (!el) return;
+            const read = new Set(readLS(readKey, [])); read.add(el.dataset.al); writeLS(readKey, [...read]);
+            el.classList.remove('unread'); renderBadges();
+            if (el.dataset.live) { pickSession = el.dataset.live; go('checkin'); }
+        });
+        $('readAll').addEventListener('click', () => { writeLS(readKey, alerts().map(a => a.id)); renderAlerts(); ui.toast('All caught up.'); });
+
+        /* ================= PROFILE ================= */
+        function renderProfile() {
+            const me = GA.loadStudents().find(x => x.id === ME.id) || ME;
+            $('pCard').innerHTML = `<div class="ini" style="background:${PALETTE[GA.hash(ME.id) % PALETTE.length]}">${initials(ME.name)}</div><div><b style="font-size:20px">${esc(ME.name)}</b><div class="text-muted">${esc(ME.roll)} · ${esc(ME.dept)}</div><div class="mt-2"><span class="tag st-present">Active student</span></div></div>`;
+            $('pInfo').innerHTML = [['Email', ME.email], ['Semester / section', `Semester ${ME.sem} · Section ${ME.section}`], ['Courses', MY.map(c => c.code).join(', ')], ['Guardian', ME.guardian || '—']].map(([k, v]) => `<div class="info-row"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
+            $('pPhone').value = me.phone || '';
+            const mine = me.device && me.device.deviceId === deviceId();
+            $('devBox').innerHTML = me.device
+                ? `<div class="dev"><div class="di"><i class="bi bi-phone-fill"></i></div><div style="min-width:0"><b>${esc(me.device.model)}</b><br><small class="text-muted">Registered ${new Date(me.device.bound).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</small><br>
+                   <span class="tag ${mine ? 'st-present' : me.device.deviceId ? 'st-absent' : 'st-late'} mt-1">${mine ? 'This device' : me.device.deviceId ? 'A different device' : 'Will be confirmed at your next check-in'}</span></div></div>
+                   <div class="note-box"><i class="bi bi-info-circle"></i><span>Changed or lost your phone? Ask the admin office to reset your registered device.</span></div>`
+                : `<div class="empty py-3"><i class="bi bi-phone"></i><b>No phone registered yet</b>The phone you use for your first check-in becomes your registered device.</div>`;
+        }
+        $('pSave').addEventListener('click', () => {
+            const phone = $('pPhone').value.trim();
+            if (phone && !/^\+?[\d\s-]{10,16}$/.test(phone)) { $('pPhone').classList.add('invalid'); return ui.toast('Please enter a valid phone number.', 'error'); }
+            $('pPhone').classList.remove('invalid');
+            students = GA.loadStudents(); const me = students.find(x => x.id === ME.id); me.phone = phone; GA.saveStudents(students);
+            fx.success($('pSave'), 'Saved'); ui.toast('Phone number updated.');
+        });
+        $('pwSave').addEventListener('click', () => {
+            const overrides = readLS('ga_pw_reset', {}), signup = readLS('ga_users', []).find(u => (u.email || '').toLowerCase() === ME.email.toLowerCase());
+            const current = overrides[ME.email] || signup?.password || 'Student@123';   // demo default, see DEMO_ACCOUNTS.md
+            const nw = $('pwNew').value;
+            [$('pwCur'), $('pwNew'), $('pwNew2')].forEach(i => i.classList.remove('invalid'));
+            if ($('pwCur').value !== current) { $('pwCur').classList.add('invalid'); return ui.toast('Current password is incorrect.', 'error'); }
+            if (nw.length < 8 || !(/[a-z]/.test(nw) && /[A-Z]/.test(nw) && /\d/.test(nw))) { $('pwNew').classList.add('invalid'); return ui.toast('Use at least 8 characters with upper and lower case letters and a number.', 'error'); }
+            if (nw !== $('pwNew2').value) { $('pwNew2').classList.add('invalid'); return ui.toast('Passwords do not match.', 'error'); }
+            overrides[ME.email] = nw; writeLS('ga_pw_reset', overrides);
+            [$('pwCur'), $('pwNew'), $('pwNew2')].forEach(i => i.value = ''); fx.success($('pwSave'), 'Updated'); ui.toast('Password updated — use it next time you sign in.');
+        });
+
+        $('topSearch').addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const q = e.target.value.trim().toLowerCase(), c = MY.find(x => (x.code + ' ' + x.name).toLowerCase().includes(q));
+            if (!c) return ui.toast(`No course matches "${e.target.value}".`, 'info');
+            go('attendance'); setTimeout(() => { const r = document.querySelector(`#courseChips input[value="${c.code}"]`); if (r) { r.checked = true; attCourse = c.code; renderAttendance(); } }, 100);
+        });
+
+        /* ================= INIT ================= */
+        lastSig = myLive().map(s => s.id + ':' + (myCheck(s)?.status || '')).join(',');
+        refreshLive(); renderBadges();
+        show(location.hash.slice(1) || 'home');
+    </script>
+</body>
+</html>

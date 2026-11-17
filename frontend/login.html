@@ -892,8 +892,7 @@
                 showTab('signin');
                 $('r-' + role).checked = true;
                 $('loginUser').value = email;
-                if (role === 'teacher') { showAlert('loginSuccess', 'Request sent! An admin must approve your teacher account before you can sign in.'); }
-                else showAlert('loginSuccess', 'Account created! Sign in with your new credentials.');
+                showAlert('loginSuccess', `Request sent! An admin must approve your ${role} account before you can sign in.`);
             }, 700);
         });
 

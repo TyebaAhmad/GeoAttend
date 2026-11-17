@@ -7,6 +7,7 @@ There is no backend yet, so `login.html` checks accounts in the browser.
 |---------|---------------|----------------------------|---------------|------------------------|
 | Admin   | `admin`       | admin@geoattend.edu        | `Admin@123`   | `admin_dashboard.html` |
 | Teacher | `EMP-1001`    | sana.malik@university.edu  | `Teacher@123` | `teacher_portal.html`  |
+| Student | `FA25-BCS-005` | bilal.akhtar5@university.edu | `Student@123` | `student_portal.html` |
 
 ## Teachers
 
@@ -20,8 +21,14 @@ There is no backend yet, so `login.html` checks accounts in the browser.
 
 ## Students
 
-- Register from the **Sign Up** tab on `login.html`. Registered accounts are saved in `localStorage` (key `ga_users`).
-- The student portal is not built yet, so students see a "coming soon" message after signing in.
+- Students sign in on **`login.html`** by choosing the **Student** role.
+- **Every active student** in the demo data can sign in with their university email or roll number and the demo
+  password `Student@123`. Bilal Akhtar (above) is a Computer Science student enrolled in CS301, CS205, CS110 and MT105.
+- Students who **sign up** use the password they chose, and must be approved by the admin (Admin → Students) first.
+- To try **Mark Attendance**: sign in as Dr. Sana Malik in another tab, start CS301 attendance in the teacher portal,
+  then in the student portal tap **Check in** → *Simulate: I'm in the classroom* (or use real GPS on a phone).
+  If the session needs a QR code, type the 6-character code shown on the teacher's screen.
+- The first phone used to check in becomes the student's registered device (key `ga_device_id`).
 
 ## Forgot password (demo)
 
